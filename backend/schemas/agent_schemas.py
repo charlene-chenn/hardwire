@@ -23,3 +23,36 @@ class SpecGeneratorOutput(BaseModel):
     parts_required: List[str]
     viable: bool
     reasoning: str
+
+
+# ── Assembly Agent Schemas ──────────────────────────────────────────
+
+class ComponentBounds(BaseModel):
+    """Bounding-box dimensions extracted from an STL file."""
+    filename: str
+    width: float = Field(description="X-axis extent in mm")
+    depth: float = Field(description="Y-axis extent in mm")
+    height: float = Field(description="Z-axis extent in mm")
+    min_point: List[float] = Field(description="[x, y, z] min corner")
+    max_point: List[float] = Field(description="[x, y, z] max corner")
+
+
+class ComponentPlacement(BaseModel):
+    """Where and how a single component is placed inside the assembly."""
+    component_file: str = Field(description="STL filename from cad_library/components")
+    position: List[float] = Field(description="[x, y, z] translation in mm")
+    rotation: List[float] = Field(default=[0, 0, 0], description="[rx, ry, rz] rotation in degrees")
+    label: str = Field(default="", description="Human-readable label for this placement")
+
+
+class AssemblyOutput(BaseModel):
+    """Full output of the Assembly Agent."""
+    openscad_code: str = Field(description="Complete OpenSCAD script for the assembly")
+    scad_file_path: str = Field(description="Path where the .scad file was saved")
+    placements: List[ComponentPlacement] = Field(description="Placement details for every component")
+    housing_dimensions: List[float] = Field(description="[width, depth, height] of the generated housing in mm")
+    overlap_free: bool = Field(description="Whether all placements passed the overlap check")
+    components_inside: bool = Field(description="Whether all components are within the housing interior")
+    physically_feasible: bool = Field(description="Whether all components are properly supported (not floating)")
+    preview_png_path: Optional[str] = Field(default=None, description="Path to rendered preview image, if available")
+    design_notes: str = Field(default="", description="Agent reasoning / design notes")

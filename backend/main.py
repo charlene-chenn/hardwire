@@ -1,12 +1,13 @@
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form
 from dotenv import load_dotenv
 import os
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
-from backend.schemas.agent_schemas import DataExtractionOutput, SpecGeneratorOutput
+from backend.schemas.agent_schemas import DataExtractionOutput, SpecGeneratorOutput, AssemblyOutput
 from backend.agents.data_extraction import DataExtractionAgent
 from backend.agents.spec_generator import SpecGeneratorAgent
+from backend.agents.assembly_agent import AssemblyAgent
 from backend.services.supabase_service import SupabaseService
 
 load_dotenv()
@@ -16,6 +17,7 @@ app = FastAPI(title="HARDWIRE Multi-Agent Pipeline")
 # In-memory agent instances
 data_extraction_agent = DataExtractionAgent()
 spec_generator_agent = SpecGeneratorAgent()
+assembly_agent = AssemblyAgent()
 supabase_service = SupabaseService()
 
 @app.get("/")
@@ -59,6 +61,63 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/design-assembly")
+async def design_assembly(
+    prompt: str = Form(...),
+    wall_thickness: float = Form(2.0),
+    clearance: float = Form(1.0),
+    component_files: Optional[str] = Form(None, description="Comma-separated STL filenames, or omit to use all"),
+    schematics: List[UploadFile] = File(default=[]),
+) -> Dict[str, Any]:
+    """
+    Assembly Agent endpoint.
+    Reads STLs from cad_library/components, accepts optional schematic uploads
+    and a text prompt, then generates an OpenSCAD assembly with housing.
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set.")
+
+    try:
+        # Save uploaded schematics to a temp location
+        schematic_paths: List[str] = []
+        temp_dir = os.path.join(os.path.dirname(__file__), "cad_library", "temp_schematics")
+        os.makedirs(temp_dir, exist_ok=True)
+
+        for schematic in schematics:
+            fpath = os.path.join(temp_dir, schematic.filename)
+            with open(fpath, "wb") as f:
+                f.write(await schematic.read())
+            schematic_paths.append(fpath)
+
+        # Parse optional component filter
+        comp_files = None
+        if component_files:
+            comp_files = [c.strip() for c in component_files.split(",") if c.strip()]
+
+        result: AssemblyOutput = await assembly_agent.design_assembly(
+            user_prompt=prompt,
+            schematic_paths=schematic_paths if schematic_paths else None,
+            component_files=comp_files,
+            wall_thickness=wall_thickness,
+            clearance=clearance,
+        )
+
+        # Clean up temp schematics
+        for p in schematic_paths:
+            if os.path.isfile(p):
+                os.remove(p)
+
+        return result.dict()
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

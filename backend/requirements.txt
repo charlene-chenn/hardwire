@@ -7,3 +7,5 @@ httpx
 beautifulsoup4
 pydantic
 googlesearch-python
+numpy-stl
+python-multipart
