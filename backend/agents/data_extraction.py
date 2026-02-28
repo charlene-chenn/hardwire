@@ -81,21 +81,19 @@ class DataExtractionAgent:
                     # Verify it's actually a PDF
                     if content.startswith(b"%PDF"):
                         # Save as base64
-                        datasheet_contents.append(base64.b64encode(content).decode('utf-8'))
+                        content_64 = base64.b64encode(content).decode('utf-8')
+                        datasheet_contents.append(content_64)
                         
                         filename = f"datasheets/{clean_comp}.pdf"
                         storage_url = await self.supabase.upload_file("hardware_assets", filename, content)
                         if storage_url:
                             all_datasheets.append(storage_url)
-                            # Save content as base64 in database for direct retrieval
-                            b64_str = base64.b64encode(content).decode('utf-8')
-                            # Add label and content to database for searchability
                             self.supabase.save_data("component_assets", {
                                 "component_name": comp,
                                 "asset_type": "datasheet",
                                 "url": storage_url,
                                 "label": clean_comp,
-                                "content_base64": b64_str
+                                "content_base64": content_64,
                             })
                         else:
                             all_datasheets.append(url)
@@ -124,15 +122,12 @@ class DataExtractionAgent:
                         storage_url = await self.supabase.upload_file("hardware_assets", filename, content)
                         if storage_url:
                             all_stls.append(storage_url)
-                            # Save content as base64 in database for direct retrieval
-                            b64_str = base64.b64encode(content).decode('utf-8')
-                            # Add label and content to database for searchability
                             self.supabase.save_data("component_assets", {
                                 "component_name": comp,
                                 "asset_type": "stl",
                                 "url": storage_url,
                                 "label": clean_comp,
-                                "content_base64": b64_str
+                                "content_base64": base64.b64encode(content).decode('utf-8'),
                             })
                         else:
                             all_stls.append(url)
