@@ -13,7 +13,7 @@ from backend.agents.assembly_agent import AssemblyAgent
 
 async def test_assembly_agent():
     # Sample prompt and (optionally) schematic
-    sample_prompt = "Design a compact enclosure for a ESP-32 and a dh22 temperature sensor. The enclosure should have ventilation slots."
+    sample_prompt = "Design a compact enclosure for a ESP-32 and a dh22t temperature sensor. The enclosure should have ventilation slots."
     # Place a few sample STL files in cad_library/components/ before running this test
     agent = AssemblyAgent()
 
@@ -45,7 +45,15 @@ async def test_assembly_agent():
 
         print(f"\n📦 Housing dimensions: {result.housing_dimensions} mm")
         print(f"📍 Components placed: {len(result.placements)}")
-        print(f"📄 File: {result.scad_file_path}")
+        print(f"📄 SCAD: {result.scad_file_path}")
+        if result.stl_full_path:
+            print(f"📦 STL (full assembly):  {result.stl_full_path}")
+        else:
+            print("⚠️  Full STL export skipped (openscad CLI not found)")
+        if result.stl_housing_path:
+            print(f"🏠 STL (housing only):   {result.stl_housing_path}")
+        else:
+            print("⚠️  Housing STL export skipped (openscad CLI not found)")
         print("Test passed!")
     except Exception as e:
         print(f"AssemblyAgent Error: {e}")

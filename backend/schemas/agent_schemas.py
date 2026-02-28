@@ -49,6 +49,8 @@ class AssemblyOutput(BaseModel):
     """Full output of the Assembly Agent."""
     openscad_code: str = Field(description="Complete OpenSCAD script for the assembly")
     scad_file_path: str = Field(description="Path where the .scad file was saved")
+    stl_full_path: Optional[str] = Field(default=None, description="STL of full assembly (housing + electronics)")
+    stl_housing_path: Optional[str] = Field(default=None, description="STL of housing only (no electronics)")
     placements: List[ComponentPlacement] = Field(description="Placement details for every component")
     housing_dimensions: List[float] = Field(description="[width, depth, height] of the generated housing in mm")
     overlap_free: bool = Field(description="Whether all placements passed the overlap check")

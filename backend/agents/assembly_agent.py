@@ -8,6 +8,7 @@ components are placed without overlap.
 
 import os
 import json
+import re
 import base64
 import shutil
 import subprocess
@@ -143,7 +144,8 @@ class AssemblyAgent:
         with open(scad_path, "w") as f:
             f.write(openscad_code)
 
-        # 7. Attempt to render a preview PNG via the openscad CLI
+        # 7. Export STLs (full assembly + housing-only) and render preview
+        stl_full_path, stl_housing_path = self._export_stls(scad_path)
         preview_path = self._render_preview(scad_path)
 
         # 8. Assemble output
@@ -153,6 +155,8 @@ class AssemblyAgent:
         return AssemblyOutput(
             openscad_code=openscad_code,
             scad_file_path=scad_path,
+            stl_full_path=stl_full_path,
+            stl_housing_path=stl_housing_path,
             placements=placements,
             housing_dimensions=housing_dims,
             overlap_free=overlap_free,
@@ -473,3 +477,67 @@ class AssemblyAgent:
             return png_path
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return None
+
+    @staticmethod
+    def _export_stl(scad_path: str) -> Optional[str]:
+        """Export the .scad file to STL. Returns path or None."""
+        if not shutil.which("openscad"):
+            return None
+        stl_path = scad_path.replace(".scad", ".stl")
+        try:
+            subprocess.run(
+                ["openscad", "-o", stl_path, scad_path],
+                check=True, capture_output=True, timeout=120,
+            )
+            return stl_path if os.path.exists(stl_path) else None
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return None
+
+    @classmethod
+    def _export_stls(cls, scad_path: str) -> tuple:
+        """Export two STL files from a .scad assembly:
+
+        1. **full assembly** — housing + electronics (everything)
+        2. **housing only** — enclosure geometry without any imported STL components
+
+        Returns ``(full_stl_path, housing_stl_path)``; either may be ``None``.
+        """
+        if not shutil.which("openscad"):
+            return None, None
+
+        # ── Full assembly STL ──
+        full_stl = cls._export_stl(scad_path)
+
+        # ── Housing-only STL ──
+        # Create a modified .scad that comments out every import() call
+        # and every line that references the normalised component modules,
+        # leaving only the housing/lid geometry.
+        try:
+            with open(scad_path, "r") as f:
+                original = f.read()
+
+            # Replace every import("...") call with cube(0) — a valid no-op geometry
+            # so the translate/rotate chains above them don't cause parse errors.
+            housing_code = re.sub(
+                r'import\s*\([^)]*\)',
+                'cube(0)',
+                original,
+            )
+
+            housing_scad = scad_path.replace(".scad", "_housing.scad")
+            with open(housing_scad, "w") as f:
+                f.write(housing_code)
+
+            housing_stl = scad_path.replace(".scad", "_housing.stl")
+            subprocess.run(
+                ["openscad", "-o", housing_stl, housing_scad],
+                check=True, capture_output=True, timeout=120,
+            )
+            # Clean up temp scad
+            os.remove(housing_scad)
+
+            housing_stl_result = housing_stl if os.path.exists(housing_stl) else None
+        except Exception:
+            housing_stl_result = None
+
+        return full_stl, housing_stl_result
