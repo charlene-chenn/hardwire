@@ -15,6 +15,8 @@ class ComponentRecommendation(BaseModel):
 class DataExtractionOutput(BaseModel):
     datasheet_pdfs: List[str]  # URLs or storage paths
     component_stls: List[str]  # URLs or storage paths
+    datasheet_contents: List[str] = []  # base64-encoded PDF contents
+    stl_contents: List[str] = []  # base64-encoded STL contents
     recommendations: List[ComponentRecommendation]
     metadata: dict
 
