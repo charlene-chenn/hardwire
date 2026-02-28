@@ -23,3 +23,9 @@ class SpecGeneratorOutput(BaseModel):
     parts_required: List[str]
     viable: bool
     reasoning: str
+
+class ElectronicsOutput(BaseModel):
+    schematic_pdf_url: str
+    instructions: str
+    code: str
+    metadata: dict

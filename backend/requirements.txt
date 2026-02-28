@@ -7,3 +7,4 @@ httpx
 beautifulsoup4
 pydantic
 tavily-python
+fpdf2
