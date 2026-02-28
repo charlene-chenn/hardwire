@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+anthropic
+supabase
+python-dotenv
+httpx
+beautifulsoup4
+pydantic
+googlesearch-python
