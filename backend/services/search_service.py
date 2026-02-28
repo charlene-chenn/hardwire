@@ -1,78 +1,61 @@
-from googlesearch import search
+import os
 import httpx
-from bs4 import BeautifulSoup
-from urllib.parse import unquote
+from tavily import TavilyClient
 from typing import List, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class SearchService:
     def __init__(self):
+        api_key = os.getenv("TAVILY_API_KEY")
+        if not api_key:
+            print("WARNING: TAVILY_API_KEY not found in .env. Search will fail.")
+        self.tavily = TavilyClient(api_key=api_key)
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
 
-    def search_google(self, query: str, num_results: int = 5) -> List[str]:
+    async def search_tavily(self, query: str, search_depth: str = "advanced", num_results: int = 5) -> List[str]:
         """
-        Use the googlesearch-python library.
+        Search using Tavily AI Search.
         """
         try:
-            results = search(query, num_results=num_results)
-            return list(results)
+            # Tavily is optimized for LLM agents
+            response = self.tavily.search(query=query, search_depth=search_depth, max_results=num_results)
+            return [r['url'] for r in response.get('results', [])]
         except Exception as e:
-            print(f"Google Search error: {e}")
+            print(f"Tavily Search error: {e}")
             return []
 
-    async def search_ddg(self, query: str, num_results: int = 5) -> List[str]:
-        """
-        Fallback scraper for DuckDuckGo.
-        """
-        url = f"https://html.duckduckgo.com/html/?q={query}"
-        async with httpx.AsyncClient(headers=self.headers) as client:
-            try:
-                response = await client.get(url, timeout=10)
-                if response.status_code != 200:
-                    return []
-                
-                soup = BeautifulSoup(response.text, 'html.parser')
-                links = []
-                for a in soup.find_all('a', class_='result__a', href=True):
-                    href = a['href']
-                    if 'uddg=' in href:
-                        actual_url = href.split('uddg=')[1].split('&')[0]
-                        links.append(unquote(actual_url))
-                    else:
-                        links.append(href)
-                        
-                    if len(links) >= num_results:
-                        break
-                return links
-            except Exception as e:
-                print(f"DDG Search error: {e}")
-                return []
-
-    async def search_hybrid(self, query: str, num_results: int = 5) -> List[str]:
-        """
-        Try Google first, fallback to DDG.
-        """
-        results = self.search_google(query, num_results)
-        if not results:
-            print(f"Falling back to DDG for query: {query}")
-            results = await self.search_ddg(query, num_results)
-        return results
-
     async def search_datasheets(self, component_name: str) -> List[str]:
-        query = f"{component_name} datasheet filetype:pdf"
-        return await self.search_hybrid(query)
+        """
+        Search for datasheets, prioritizing credible sources.
+        """
+        credible_domains = ["digikey.com", "mouser.com", "rs-online.com", "farnell.com", "ti.com", "st.com", "analog.com"]
+        site_query = " OR ".join([f"site:{domain}" for domain in credible_domains])
+        query = f"{component_name} official datasheet pdf ({site_query})"
+        
+        print(f"Searching Tavily for {component_name} datasheets...")
+        return await self.search_tavily(query, num_results=3)
 
     async def search_stls(self, component_name: str) -> List[str]:
-        query = f"{component_name} 3D model STL GrabCAD SnapEDA"
-        return await self.search_hybrid(query)
+        """
+        Search for 3D STL files.
+        """
+        query = f"{component_name} 3D model STL file GrabCAD SnapEDA"
+        print(f"Searching Tavily for {component_name} STL models...")
+        return await self.search_tavily(query, num_results=3)
 
     async def download_file(self, url: str) -> Optional[bytes]:
-        async with httpx.AsyncClient(headers=self.headers) as client:
+        async with httpx.AsyncClient(headers=self.headers, follow_redirects=True) as client:
             try:
-                response = await client.get(url, timeout=10, follow_redirects=True)
+                print(f"Downloading: {url}")
+                response = await client.get(url, timeout=15)
                 if response.status_code == 200:
                     return response.content
+                else:
+                    print(f"Failed to download {url}: Status {response.status_code}")
             except Exception as e:
                 print(f"Error downloading {url}: {e}")
         return None
