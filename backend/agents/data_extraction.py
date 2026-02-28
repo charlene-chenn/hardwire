@@ -4,6 +4,7 @@ import base64
 from dotenv import load_dotenv
 from backend.schemas.agent_schemas import DataExtractionOutput, ComponentRecommendation
 from backend.services.search_service import SearchService
+from backend.services.supabase_service import SupabaseService
 from typing import List
 
 load_dotenv()
@@ -13,6 +14,7 @@ class DataExtractionAgent:
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.model = "claude-sonnet-4-6"
         self.search_service = SearchService()
+        self.supabase = SupabaseService()
 
     async def extract_and_fetch(self, user_prompt: str) -> DataExtractionOutput:
         """
@@ -20,7 +22,9 @@ class DataExtractionAgent:
         """
         # 1. Identify components from user prompt
         system_prompt = (
-            "You are an assistant that extracts electronic component names from a user's prompt. "
+            "You are an expert electronics engineer assistant. Extract only the names of electronic components "
+            "that have technical specifications (like ICs, transistors, sensors, microcontrollers). "
+            "Exclude generic hardware like 'wires', 'screws', 'breadboards', or mechanical parts without datasheets. "
             "Return a clean JSON array of strings using the list_components tool."
         )
 
@@ -28,11 +32,11 @@ class DataExtractionAgent:
             model=self.model,
             max_tokens=500,
             system=system_prompt,
-            messages=[{"role": "user", "content": f"Extract components from: {user_prompt}"}],
+            messages=[{"role": "user", "content": f"Extract electronic components with specifications from: {user_prompt}"}],
             tools=[
                 {
                     "name": "list_components",
-                    "description": "List extracted component names.",
+                    "description": "List extracted electronic component names.",
                     "input_schema": {
                         "type": "object",
                         "properties": {
@@ -54,12 +58,11 @@ class DataExtractionAgent:
         datasheet_contents = []
         stl_contents = []
         
-        # Initialize Supabase service for file uploads
-        from backend.services.supabase_service import SupabaseService
-        supabase = SupabaseService()
-        
         for comp in components:
-            print(f"--- Processing component: {comp} ---")
+            # Clean component name for filename: lowercase and replace spaces with underscores
+            clean_comp = comp.lower().replace(" ", "_")
+            print(f"--- Processing component: {comp} (as {clean_comp}) ---")
+            
             # Search
             ds_urls = await self.search_service.search_datasheets(comp)
             stl_urls = await self.search_service.search_stls(comp)
@@ -70,7 +73,6 @@ class DataExtractionAgent:
                 if any(x in url.lower() for x in [".html", ".php", "/search", "/category"]):
                     if not url.lower().endswith(".pdf"):
                         print(f"Skipping likely non-direct PDF link: {url}")
-                        all_datasheets.append(url)
                         continue
 
                 print(f"Downloading datasheet: {url}")
@@ -79,27 +81,32 @@ class DataExtractionAgent:
                     # Verify it's actually a PDF
                     if content.startswith(b"%PDF"):
                         # Save as base64
-                        datasheet_contents.append(base64.b64encode(content).decode('utf-8'))
+                        content_64 = base64.b64encode(content).decode('utf-8')
+                        datasheet_contents.append(content_64)
                         
-                        filename = f"datasheets/{comp}_{i}.pdf"
-                        storage_url = await supabase.upload_file("hardware_assets", filename, content)
+                        filename = f"datasheets/{clean_comp}.pdf"
+                        storage_url = await self.supabase.upload_file("hardware_assets", filename, content)
                         if storage_url:
                             all_datasheets.append(storage_url)
+                            self.supabase.save_data("component_assets", {
+                                "component_name": comp,
+                                "asset_type": "datasheet",
+                                "url": storage_url,
+                                "label": clean_comp,
+                                "content_base64": content_64,
+                            })
                         else:
                             all_datasheets.append(url)
+                        break
                     else:
                         print(f"Downloaded content from {url} was not a valid PDF.")
-                        all_datasheets.append(url)
-                else:
-                    all_datasheets.append(url)
-            
+
             # Download and Upload STLs
             for i, url in enumerate(stl_urls):
                 # Skip likely landing pages
                 if any(x in url.lower() for x in [".html", ".php", "/parts", "/libraries"]):
                     if not url.lower().endswith(".stl"):
                         print(f"Skipping likely non-direct STL link: {url}")
-                        all_stls.append(url)
                         continue
 
                 print(f"Downloading STL/Model: {url}")
@@ -110,17 +117,21 @@ class DataExtractionAgent:
                     if is_stl:
                         # Save as base64
                         stl_contents.append(base64.b64encode(content).decode('utf-8'))
-                        
-                        filename = f"stls/{comp}_{i}.stl"
-                        storage_url = await supabase.upload_file("hardware_assets", filename, content)
+
+                        filename = f"stls/{clean_comp}.stl"
+                        storage_url = await self.supabase.upload_file("hardware_assets", filename, content)
                         if storage_url:
                             all_stls.append(storage_url)
+                            self.supabase.save_data("component_assets", {
+                                "component_name": comp,
+                                "asset_type": "stl",
+                                "url": storage_url,
+                                "label": clean_comp,
+                                "content_base64": base64.b64encode(content).decode('utf-8'),
+                            })
                         else:
                             all_stls.append(url)
-                    else:
-                        all_stls.append(url)
-                else:
-                    all_stls.append(url)
+                        break
 
         # 3. Recommend other components
         rec_prompt = (
