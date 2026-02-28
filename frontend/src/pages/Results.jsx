@@ -52,12 +52,15 @@ export default function Results() {
       <div className="results-right">
         {/* Text Panel */}
         <div className="results-text-panel">
-          <div className="panel-label">Analysis</div>
-          <p>{reply}</p>
+          <div className="panel-header">
+            <div className="panel-label">Analysis</div>
+          </div>
+          <div className="panel-body">
+            <p>{reply}</p>
+          </div>
         </div>
 
         {/* Code Block Panel */}
-        {/* 🔌 Replace EXAMPLE_CODE with code returned from your backend */}
         <CodeBlock code={EXAMPLE_CODE} language="python" />
       </div>
     </div>

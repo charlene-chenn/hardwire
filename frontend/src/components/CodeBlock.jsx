@@ -12,8 +12,8 @@ export default function CodeBlock({ code, language = 'python' }) {
 
   return (
     <div className="results-code-panel glass">
-      <div className="results-code-header">
-        <span className="panel-label" style={{ margin: 0 }}>{language}</span>
+      <div className="panel-header">
+        <span className="panel-label">{language}</span>
         <button className="copy-btn" onClick={handleCopy}>
           {copied ? 'Copied' : 'Copy'}
         </button>
