@@ -7,6 +7,7 @@ from typing import Dict, Any
 from backend.schemas.agent_schemas import DataExtractionOutput, SpecGeneratorOutput
 from backend.agents.data_extraction import DataExtractionAgent
 from backend.agents.spec_generator import SpecGeneratorAgent
+from backend.agents.electronics_agent import ElectronicsAgent
 from backend.services.supabase_service import SupabaseService
 
 load_dotenv()
@@ -16,6 +17,7 @@ app = FastAPI(title="HARDWIRE Multi-Agent Pipeline")
 # In-memory agent instances
 data_extraction_agent = DataExtractionAgent()
 spec_generator_agent = SpecGeneratorAgent()
+electronics_agent = ElectronicsAgent()
 supabase_service = SupabaseService()
 
 @app.get("/")
@@ -42,12 +44,17 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
         extraction_result = results[0]
         spec_result = results[1]
 
-        # For now, we return both. Later, these will be routed to the 'Electronics Guy'.
-        # We also want to save the final result to Supabase for record keeping.
+        # 3. Electronics Design (Schematic, Instructions, Code)
+        electronics_result = await electronics_agent.generate_design(
+            spec_result, 
+            extraction_result
+        )
+
         combined_payload = {
             "prompt": prompt,
             "extraction": extraction_result.dict(),
-            "spec": spec_result.dict()
+            "spec": spec_result.dict(),
+            "design": electronics_result.dict()
         }
 
         # Save to Supabase (Mocked if no credentials)

@@ -12,6 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.agents.spec_generator import SpecGeneratorAgent
 from backend.agents.data_extraction import DataExtractionAgent
+from backend.agents.electronics_agent import ElectronicsAgent
 
 async def test_pipeline():
     # Sample user prompt for a hackathon project
@@ -22,6 +23,7 @@ async def test_pipeline():
     # Initialize agents
     spec_agent = SpecGeneratorAgent()
     data_agent = DataExtractionAgent()
+    electronics_agent = ElectronicsAgent()
 
     # 1. Test Spec Generator Agent
     print("--- Testing Spec Generator Agent ---")
@@ -40,9 +42,27 @@ async def test_pipeline():
         # This will perform web searches and attempt downloads/uploads
         data_output = await data_agent.extract_and_fetch(sample_prompt)
         print("Data Extraction Output:")
-        print(json.dumps(data_output.dict(), indent=2))
+        # print(json.dumps(data_output.dict(), indent=2))
+        print(f"Extracted {len(data_output.datasheet_pdfs)} datasheets.")
     except Exception as e:
         print(f"Data Extraction Error: {e}")
+        data_output = None
+
+    print("\n" + "="*50 + "\n")
+
+    # 3. Test Electronics Agent
+    print("--- Testing Electronics Agent ---")
+    if spec_output and data_output:
+        try:
+            electronics_output = await electronics_agent.generate_design(spec_output, data_output)
+            print("Electronics Agent Output:")
+            print(json.dumps(electronics_output.dict(), indent=2))
+        except Exception as e:
+            print(f"Electronics Agent Error: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("Skipping Hardware Design test due to previous failures.")
 
 if __name__ == "__main__":
     if not os.getenv("ANTHROPIC_API_KEY"):
