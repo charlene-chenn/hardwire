@@ -57,7 +57,7 @@ export default function Chat() {
 
   return (
     <div className="chat-container">
-      <h1 className="landing-title" style={{ fontSize: '32px' }}>Mission Control</h1>
+      <h1 className="landing-title" style={{ fontSize: '32px' }}>Bob the Builder</h1>
 
       <div className="chat-messages">
         {messages.map((msg, i) => (
@@ -77,7 +77,7 @@ export default function Chat() {
         <textarea
           className="chat-input"
           rows={1}
-          placeholder="Type a message to Mission Control..."
+          placeholder="Type a message to Bob..."
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}

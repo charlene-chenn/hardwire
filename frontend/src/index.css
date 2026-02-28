@@ -7,6 +7,8 @@
   --accent-glow: rgba(0, 87, 255, 0.4);
   --glass-bg: rgba(255, 255, 255, 0.03);
   --glass-border: rgba(255, 255, 255, 0.08);
+  --panel-border: rgba(255, 255, 255, 0.4);
+  --subtle-border: rgba(255, 255, 255, 0.1);
   --text-primary: #ffffff;
   --text-secondary: #a0a0a5;
   --transition-fast: 0.2s ease;
@@ -96,12 +98,12 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: auto;
-  min-width: 400px;
+  min-width: 200px;
   padding: 12px 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  justify-content: center;
+  gap: 16px;
   z-index: 1000;
   background: rgba(10, 10, 12, 0.7);
   backdrop-filter: blur(16px);
@@ -308,6 +310,10 @@ body {
   outline: none;
 }
 
+.results-layout.glass {
+  border: 1.5px solid var(--subtle-border);
+}
+
 .results-layout {
   display: flex;
   gap: 24px;
@@ -319,10 +325,10 @@ body {
 
 .results-left {
   flex: 0 0 65%;
-  background: rgba(10, 10, 12, 0.6);
+  background: rgba(10, 10, 12, 0.7);
   backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  border: 1.5px solid var(--subtle-border);
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -335,10 +341,10 @@ body {
 
 .results-text-panel,
 .results-code-panel {
-  background: rgba(10, 10, 12, 0.6);
+  background: rgba(10, 10, 12, 0.85);
   backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  border: 1.5px solid var(--panel-border);
+  border-radius: 12px;
 }
 
 .results-code-header {
@@ -359,6 +365,19 @@ body {
   padding: 20px 16px 40px 16px;
 }
 
+.results-code-body {
+  padding: 0 16px 24px 16px;
+}
+
+.results-code-body pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e0e0e6;
+  white-space: pre-wrap;
+}
+
 .panel-label {
   color: var(--accent-blue);
   font-weight: 600;
@@ -366,6 +385,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
 .copy-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
