@@ -176,7 +176,7 @@ body {
 
 .landing-subtitle {
   font-size: 18px;
-  color: var(--text-secondary);
+  color: rgb(241, 237, 237);
   line-height: 1.6;
   max-width: 600px;
   margin-bottom: 12px;
@@ -211,6 +211,72 @@ body {
 }
 
 /* Chat & Results */
+.chat-page-layout {
+  display: flex;
+  gap: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  align-items: flex-start;
+  padding: 40px 24px;
+}
+
+.chat-main-column {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-examples-sidebar {
+  flex: 0 0 300px;
+  position: sticky;
+  top: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 33px;
+}
+
+.section-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+
+.example-prompts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.example-prompt-card {
+  padding: 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+.example-prompt-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--accent-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+
+.example-prompt-card p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.example-prompt-card:hover p {
+  color: #fff;
+}
+
 .chat-container {
   max-width: 800px;
   margin: 0 auto;
@@ -438,4 +504,37 @@ body {
   color: var(--accent-blue);
   text-transform: uppercase;
   letter-spacing: 0.1em;
+}
+
+.no-model-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-secondary);
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
+
+.default-model-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 87, 255, 0.15);
+  border: 1px solid var(--accent-blue);
+  color: var(--accent-blue);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  z-index: 30;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  box-shadow: 0 4px 15px var(--accent-glow);
 }
