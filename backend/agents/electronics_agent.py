@@ -6,9 +6,10 @@ import json
 import anthropic
 import asyncio
 import uuid
+import re
 from fpdf import FPDF
 from dotenv import load_dotenv
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from schemas.agent_schemas import (
     DataExtractionOutput, 
     SpecGeneratorOutput, 
@@ -19,6 +20,8 @@ from services.supabase_service import SupabaseService
 load_dotenv()
 
 class ElectronicsAgent:
+    DEFAULT_VERILOG_PATH = "/tmp/unified_circuit.txt"
+
     def __init__(self, use_nemotron: bool = False):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.model = "claude-sonnet-4-6"
@@ -184,13 +187,12 @@ class ElectronicsAgent:
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _extract_top_module(verilog_code: str) -> str:
+    def _extract_top_module(verilog_code: str) -> Optional[str]:
         """Return the first module name found in the Verilog source."""
-        import re
         match = re.search(r'\bmodule\s+(\w+)', verilog_code)
         return match.group(1) if match else None
 
-    def _synthesize_with_yosys(self, verilog_code: str) -> str:
+    def _synthesize_with_yosys(self, verilog_code: str) -> Tuple[str, Optional[str]]:
         """
         Step B: Write Verilog to a temp file, run Yosys synthesis,
         and return the netlist JSON string.
@@ -338,7 +340,7 @@ class ElectronicsAgent:
         verilog = self._generate_unified_verilog(component_datasheets, spec)
         print(f"Unified Verilog generated ({len(verilog)} chars)")
 
-        verilog_path = "/tmp/unified_circuit.txt"
+        verilog_path = self.DEFAULT_VERILOG_PATH
         with open(verilog_path, "w") as f:
             f.write(verilog)
         print(f"Verilog saved to: {verilog_path}")
@@ -433,3 +435,113 @@ class ElectronicsAgent:
         filename = f"designs/{filename_prefix.replace(' ', '_')}_{uuid.uuid4().hex[:8]}.pdf"
         storage_url = await self.supabase.upload_file("hardware_asset", filename, pdf_bytes)
         return storage_url or f"local-file://{filename}"
+
+    async def verify_verilog(self, prompt: str, verilog_code: Optional[str] = None, verilog_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Verify a Verilog file against a natural language prompt.
+        Returns a score (0-100), an explanation, and syntax status.
+        """
+        print(f"\n--- Verifying Verilog against prompt ---")
+        
+        # 1. Input Handling
+        v_path_to_check = None
+        current_tmp_dir = None
+        
+        # Use default path if nothing else is provided
+        if not verilog_path and not verilog_code:
+            verilog_path = self.DEFAULT_VERILOG_PATH
+
+        if verilog_path and os.path.exists(verilog_path):
+            v_path_to_check = verilog_path
+            if not verilog_code:
+                try:
+                    with open(verilog_path, "r") as f:
+                        verilog_code = f.read()
+                except Exception as e:
+                    return {"score": 0, "explanation": f"Error reading Verilog file: {e}", "is_syntactically_correct": False}
+            print(f"  Using existing file for verification: {verilog_path}")
+        elif verilog_code:
+            current_tmp_dir = tempfile.TemporaryDirectory()
+            v_path_to_check = os.path.join(current_tmp_dir.name, "verify.v")
+            with open(v_path_to_check, "w") as f:
+                f.write(verilog_code)
+            print(f"  Using provided code, saved to temp: {v_path_to_check}")
+        else:
+            return {
+                "score": 0,
+                "explanation": "No Verilog code or file path provided for verification.",
+                "is_syntactically_correct": False
+            }
+
+        # 2. Syntax Check with Yosys
+        syntax_ok = False
+        syntax_error = ""
+        
+        try:
+            result = subprocess.run(
+                ["yosys", "-p", f"read_verilog {v_path_to_check}"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0:
+                syntax_ok = True
+                print("  Syntax check: PASSED")
+            else:
+                syntax_error = result.stderr
+                print(f"  Syntax check: FAILED\n{syntax_error}")
+        except Exception as e:
+            syntax_error = str(e)
+            print(f"  Error running yosys: {e}")
+
+        # Cleanup if we created a temp dir
+        if current_tmp_dir:
+            current_tmp_dir.cleanup()
+
+        # 3. LLM Evaluation
+        system_prompt = (
+            "You are an expert HDL verification engineer. "
+            "Your task is to evaluate a piece of Verilog code against a natural language design prompt. "
+            "Provide a score from 0 to 100 based on functional correctness, completeness, and style. "
+            "If the code has syntax errors (which will be provided), the score should be significantly lower. "
+            "Output your evaluation in JSON format with the following keys: 'score', 'explanation', 'is_syntactically_correct'."
+        )
+        
+        user_prompt = (
+            f"Design Prompt: {prompt}\n\n"
+            f"Verilog Code:\n{verilog_code}\n\n"
+            f"Yosys Syntax Check Result: {'Passed' if syntax_ok else 'Failed'}\n"
+            f"Yosys Error (if any): {syntax_error}\n"
+        )
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=2048,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            
+            # Parse JSON response from LLM
+            content = response.content[0].text.strip()
+            # Handle potential markdown fencing
+            if content.startswith("```json"):
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif content.startswith("```"):
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            evaluation = json.loads(content)
+            # Ensure keys exist
+            evaluation.setdefault("score", 0)
+            evaluation.setdefault("explanation", "Could not parse evaluation.")
+            evaluation.setdefault("is_syntactically_correct", syntax_ok)
+            
+            return evaluation
+
+        except Exception as e:
+            print(f"Error during LLM evaluation: {e}")
+            return {
+                "score": 0,
+                "explanation": f"Internal error during verification: {str(e)}",
+                "is_syntactically_correct": syntax_ok
+            }

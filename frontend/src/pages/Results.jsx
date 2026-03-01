@@ -33,6 +33,8 @@ export default function Results() {
   const prompt = location.state?.prompt;
   const [stlUrl, setStlUrl] = React.useState(location.state?.stlUrl || (prompt ? null : DEFAULT_STL_URL));
   const [loading, setLoading] = React.useState(!!prompt && !location.state?.stlUrl);
+  const [verificationData, setVerificationData] = React.useState(null);
+  const [inoFile, setInoFile] = React.useState(null);
   const objectUrlRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -59,6 +61,10 @@ export default function Results() {
             const objUrl = URL.createObjectURL(blob);
             objectUrlRef.current = objUrl;
             setStlUrl(objUrl);
+
+            // Store other metadata
+            if (data.verification_results) setVerificationData(data.verification_results);
+            if (data.ino_file) setInoFile(data.ino_file);
           } else {
             console.warn('API returned no STL file, using default.');
             setStlUrl(DEFAULT_STL_URL);
@@ -115,15 +121,40 @@ export default function Results() {
         {/* Text Panel */}
         <div className="results-text-panel">
           <div className="panel-header">
-            <div className="panel-label">Analysis</div>
+            <div className="panel-label">Schematics Next Steps</div>
           </div>
           <div className="panel-body">
-            <p>{reply}</p>
+            {verificationData ? (
+              <div className="verification-result">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <span className="panel-label" style={{ fontSize: '1.2rem', color: '#00ff00' }}>
+                    Score: {verificationData.score}/100
+                  </span>
+                  <span style={{
+                    color: verificationData.is_syntactically_correct ? '#00ff00' : '#ff4444',
+                    fontSize: '0.9rem',
+                    padding: '2px 8px',
+                    border: `1px solid ${verificationData.is_syntactically_correct ? '#00ff00' : '#ff4444'}`,
+                    borderRadius: '4px'
+                  }}>
+                    {verificationData.is_syntactically_correct ? 'SYNTAX OK' : 'SYNTAX ERROR'}
+                  </span>
+                </div>
+                <p style={{ whiteSpace: 'pre-wrap' }}>{verificationData.explanation}</p>
+              </div>
+            ) : (
+              <p>{reply}</p>
+            )}
           </div>
         </div>
 
         {/* Code Block Panel */}
-        <CodeBlock code={EXAMPLE_CODE} language="python" />
+        <div className="results-text-panel" style={{ marginTop: '20px' }}>
+          <div className="panel-header">
+            <div className="panel-label">Example Firmware (Arduino)</div>
+          </div>
+          <CodeBlock code={inoFile || EXAMPLE_CODE} language="cpp" />
+        </div>
       </div>
     </div>
   );
