@@ -36,6 +36,15 @@ export default function Results() {
   const [verificationData, setVerificationData] = React.useState(null);
   const [inoFile, setInoFile] = React.useState(null);
   const objectUrlRef = React.useRef(null);
+  const [expandedBlock, setExpandedBlock] = React.useState(null);
+
+  const handleBlockClick = (blockKey) => {
+    setExpandedBlock(blockKey);
+  };
+
+  const handleOverlayClick = () => {
+    setExpandedBlock(null);
+  };
 
   React.useEffect(() => {
     if (prompt && !location.state?.stlUrl) {
@@ -86,8 +95,17 @@ export default function Results() {
 
   return (
     <div className="results-layout glass">
+      {/* Overlay — click to collapse */}
+      {expandedBlock && (
+        <div className="results-overlay" onClick={handleOverlayClick} />
+      )}
+
       {/* LEFT — 3D Model Viewer */}
-      <div className="results-left" style={{ position: 'relative' }}>
+      <div
+        className={`results-left${expandedBlock === 'model' ? ' expanded' : ''}`}
+        style={{ position: 'relative' }}
+        onClick={expandedBlock !== 'model' ? () => handleBlockClick('model') : undefined}
+      >
         {loading && (
           <div className="loading-overlay">
             <div className="spinner"></div>
@@ -119,7 +137,10 @@ export default function Results() {
       {/* RIGHT — Text + Code */}
       <div className="results-right">
         {/* Text Panel */}
-        <div className="results-text-panel">
+        <div
+          className={`results-text-panel${expandedBlock === 'schematics' ? ' expanded' : ''}`}
+          onClick={expandedBlock !== 'schematics' ? () => handleBlockClick('schematics') : undefined}
+        >
           <div className="panel-header">
             <div className="panel-label">Schematics Next Steps</div>
           </div>
@@ -135,7 +156,11 @@ export default function Results() {
         </div>
 
         {/* Code Block Panel */}
-        <div className="results-text-panel" style={{ marginTop: '20px' }}>
+        <div
+          className={`results-text-panel${expandedBlock === 'firmware' ? ' expanded' : ''}`}
+          style={{ marginTop: '20px' }}
+          onClick={expandedBlock !== 'firmware' ? () => handleBlockClick('firmware') : undefined}
+        >
           <div className="panel-header">
             <div className="panel-label">Example Firmware (Arduino)</div>
           </div>

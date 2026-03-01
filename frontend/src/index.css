@@ -383,6 +383,47 @@ body {
   border: 1.5px solid var(--subtle-border);
   border-radius: 12px;
   overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.results-left:not(.expanded):hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.results-left.expanded,
+.results-text-panel.expanded {
+  position: absolute;
+  inset: 12px;
+  z-index: 30;
+  overflow-y: auto;
+  cursor: default;
+  animation: expand-in 0.22s ease;
+}
+
+.results-left.expanded {
+  background: rgba(10, 10, 12, 0.95);
+}
+
+.results-text-panel.expanded {
+  background: rgba(10, 10, 12, 0.97);
+}
+
+.results-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 20;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+@keyframes expand-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .results-right {
@@ -398,6 +439,14 @@ body {
   backdrop-filter: blur(20px);
   border: 1.5px solid var(--panel-border);
   border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.results-text-panel:not(.expanded):hover,
+.results-code-panel:not(.expanded):hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .results-code-header {
