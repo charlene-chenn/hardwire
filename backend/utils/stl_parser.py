@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Tuple
 from stl import mesh  # numpy-stl
 import numpy as np
 
-from backend.schemas.agent_schemas import ComponentBounds
+from schemas.agent_schemas import ComponentBounds
 
 
 def flat_rotation_for(bounds: ComponentBounds) -> Dict[str, Any]:

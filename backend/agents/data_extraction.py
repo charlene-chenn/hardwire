@@ -2,9 +2,9 @@ import os
 import anthropic
 import base64
 from dotenv import load_dotenv
-from backend.schemas.agent_schemas import DataExtractionOutput, ComponentRecommendation
-from backend.services.search_service import SearchService
-from backend.services.supabase_service import SupabaseService
+from schemas.agent_schemas import DataExtractionOutput, ComponentRecommendation
+from services.search_service import SearchService
+from services.supabase_service import SupabaseService
 from typing import List
 
 load_dotenv()

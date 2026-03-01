@@ -18,12 +18,12 @@ from datetime import datetime
 import anthropic
 from dotenv import load_dotenv
 
-from backend.schemas.agent_schemas import (
+from schemas.agent_schemas import (
     AssemblyOutput,
     ComponentBounds,
     ComponentPlacement,
 )
-from backend.utils.stl_parser import (
+from utils.stl_parser import (
     load_all_components, check_overlap, check_components_in_bounds,
     check_physical_feasibility, flat_rotation_for
 )

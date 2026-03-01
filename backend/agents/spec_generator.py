@@ -1,7 +1,7 @@
 import os
 import anthropic
 from dotenv import load_dotenv
-from backend.schemas.agent_schemas import SpecGeneratorOutput
+from schemas.agent_schemas import SpecGeneratorOutput
 
 load_dotenv()
 

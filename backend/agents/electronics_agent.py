@@ -5,12 +5,12 @@ import uuid
 from fpdf import FPDF
 from dotenv import load_dotenv
 from typing import List, Dict, Any
-from backend.schemas.agent_schemas import (
+from schemas.agent_schemas import (
     DataExtractionOutput, 
     SpecGeneratorOutput, 
     ElectronicsOutput
 )
-from backend.services.supabase_service import SupabaseService
+from services.supabase_service import SupabaseService
 
 load_dotenv()
 

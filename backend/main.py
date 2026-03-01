@@ -1,19 +1,29 @@
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 import asyncio
+import uvicorn
 from typing import Dict, Any, List, Optional
 
-from backend.schemas.agent_schemas import DataExtractionOutput, SpecGeneratorOutput, AssemblyOutput
-from backend.agents.data_extraction import DataExtractionAgent
-from backend.agents.spec_generator import SpecGeneratorAgent
-from backend.agents.electronics_agent import ElectronicsAgent
-from backend.agents.assembly_agent import AssemblyAgent
-from backend.services.supabase_service import SupabaseService
+from schemas.agent_schemas import DataExtractionOutput, SpecGeneratorOutput, AssemblyOutput
+from agents.data_extraction import DataExtractionAgent
+from agents.spec_generator import SpecGeneratorAgent
+from agents.electronics_agent import ElectronicsAgent
+from agents.assembly_agent import AssemblyAgent
+from services.supabase_service import SupabaseService
 
 load_dotenv()
 
 app = FastAPI(title="HARDWIRE Multi-Agent Pipeline")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # In-memory agent instances
 data_extraction_agent = DataExtractionAgent()
@@ -139,16 +149,16 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
         # Run agents in parallel
         # Note: In a production environment, you might use a task queue or background tasks.
         results = await asyncio.gather(
-            asssembly_agent.design_assembly(prompt)
+            assembly_agent.design_assembly(prompt)
         )
 
         # Might need to add getting result 1 depending on how we r getting the stl files
-        supabase_assembly_result = results.stl_housing_path
-        assmebly_result = results.stl_full_path
+        supabase_assembly_result = results[3]
+        assembly_result = results[2]
 
         combined_payload = {
             "prompt": prompt,
-            "design_stl_file":assmebly_result
+            "design_stl_file":assembly_result
         }
 
         supabase_payload = {
@@ -165,3 +175,6 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
