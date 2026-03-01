@@ -201,7 +201,9 @@ class AssemblyAgent:
     @staticmethod
     async def _download_stls_from_urls(urls: List[str]) -> List[str]:
         """
-        Download STL files from Supabase public URLs into COMPONENTS_DIR.
+        Fetch STL files from Supabase public URLs into COMPONENTS_DIR.
+        Supabase returns base64-encoded content, so each response body is
+        decoded before writing the binary STL to disk.
         Returns a list of local file paths that were written so they can
         be cleaned up after assembly.
         """
@@ -216,9 +218,11 @@ class AssemblyAgent:
                     dest = os.path.join(COMPONENTS_DIR, filename)
                     response = await client.get(url)
                     response.raise_for_status()
+                    # Supabase returns base64-encoded data — decode to raw bytes
+                    raw = base64.b64decode(response.content)
                     with open(dest, "wb") as f:
-                        f.write(response.content)
-                    print(f"Downloaded STL from Supabase: {url} → {dest}")
+                        f.write(raw)
+                    print(f"Downloaded + decoded STL from Supabase: {url} → {dest}")
                     downloaded.append(dest)
                 except Exception as e:
                     print(f"Warning: could not download STL from {url}: {e}")

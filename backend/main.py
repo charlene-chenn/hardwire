@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 import asyncio
 import uvicorn
+import base64
 from typing import Dict, Any, List, Optional
 
 from schemas.agent_schemas import DataExtractionOutput, SpecGeneratorOutput, AssemblyOutput
@@ -29,9 +30,10 @@ app.add_middleware(
 # In-memory agent instances
 data_extraction_agent = DataExtractionAgent()
 spec_generator_agent = SpecGeneratorAgent()
-electronics_agent = ElectronicsAgent()
+# electronics_agent = ElectronicsAgent()
 assembly_agent = AssemblyAgent()
 supabase_service = SupabaseService()
+results: Dict[str, Any] = {}  # In-memory store keyed by prompt
 
 @app.get("/")
 async def root():
@@ -49,25 +51,30 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
     try:
         # Run agents in parallel
         # Note: In a production environment, you might use a task queue or background tasks.
-        results = await asyncio.gather(
+        pipeline_results = await asyncio.gather(
             data_extraction_agent.extract_and_fetch(prompt),
             spec_generator_agent.generate_spec(prompt),
         )
 
-        extraction_result = results[0]
-        spec_result = results[1]
+        extraction_result = pipeline_results[0]
+        spec_result = pipeline_results[1]
+
+        print(f"Extraction results type: {type(extraction_result)}")
+        # Store extraction result globally so /stl-model can access it
+        results[prompt] = extraction_result
+        print("Stored extraction result for prompt:", prompt)
 
         # 3. Electronics Design (Schematic, Instructions, Code)
-        electronics_result = await electronics_agent.generate_design(
-            spec_result, 
-            extraction_result
-        )
+        # electronics_result = await electronics_agent.generate_design(
+        #     spec_result, 
+        #     extraction_result
+        # )
 
         combined_payload = {
             "prompt": prompt,
             "extraction": extraction_result.dict(),
-            "spec": spec_result.dict(),
-            "design": electronics_result.dict(),
+            "spec": spec_result.dict()
+            # "design": electronics_result.dict(),
         }
 
         # Save to Supabase (Mocked if no credentials)
@@ -156,15 +163,27 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set.")
 
     try:
+        # Retrieve extraction result stored by /process-pipeline
+        extraction = results.get(prompt)
+        if not extraction:
+            raise HTTPException(
+                status_code=400,
+                detail="No pipeline data found for this prompt. Run /process-pipeline first."
+            )
+
+        stl_urls = extraction.component_stls  # List of Supabase public URLs
+        print(f"Passing {len(stl_urls)} STL URL(s) to assembly agent: {stl_urls}")
+
         assembly_output: AssemblyOutput = await assembly_agent.design_assembly(
-            user_prompt=prompt
+            user_prompt=prompt,
+            component_stl_urls=stl_urls if stl_urls else None,
         )
 
         supabase_payload = {
             "prompt": prompt,
             "design_stl_file": assembly_output.stl_housing_base64,
         }
-        supabase_service.save_data("pipeline_results_abc", supabase_payload)
+        supabase_service.save_data("pipeline_results", supabase_payload)
 
         return JSONResponse(content={
             "prompt": prompt,
