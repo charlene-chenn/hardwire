@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment } from '@react-three/drei';
+import { OrbitControls, Environment, Stage } from '@react-three/drei';
 import CodeBlock from '../components/CodeBlock';
 import STLModel from '../components/STLModel';
 
@@ -96,14 +96,14 @@ export default function Results() {
         )}
 
         {!loading && stlUrl ? (
-          <Canvas camera={{ position: [0, 0, 50] }}>
-            <ambientLight intensity={0.6} />
-            <directionalLight position={[5, 5, 5]} intensity={1} />
-            <Suspense fallback={<mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color="#333" wireframe /></mesh>}>
-              <STLModel url={stlUrl} />
-              <Environment preset="city" />
+          <Canvas shadows camera={{ position: [0, 0, 10], fov: 50 }}>
+            <ambientLight intensity={0.5} />
+            <Suspense fallback={null}>
+              <Stage intensity={0.5} environment="city" adjustCamera={1.2} shadows={false}>
+                <STLModel url={stlUrl} />
+              </Stage>
             </Suspense>
-            <OrbitControls enablePan enableZoom enableRotate autoRotate autoRotateSpeed={2} />
+            <OrbitControls makeDefault enablePan enableZoom enableRotate autoRotate autoRotateSpeed={2} />
           </Canvas>
         ) : (
           !loading && <div className="no-model-text">No model available.</div>
