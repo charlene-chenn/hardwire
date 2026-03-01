@@ -30,7 +30,7 @@ app.add_middleware(
 # In-memory agent instances
 data_extraction_agent = DataExtractionAgent()
 spec_generator_agent = SpecGeneratorAgent()
-# electronics_agent = ElectronicsAgent()
+electronics_agent = ElectronicsAgent()
 assembly_agent = AssemblyAgent()
 supabase_service = SupabaseService()
 results: Dict[str, Any] = {}  # In-memory store keyed by prompt
@@ -61,7 +61,7 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
 
         print(f"Extraction results type: {type(extraction_result)}")
         # Store extraction result globally so /stl-model can access it
-        results[prompt] = extraction_result
+        results[prompt] = {"extraction_result":extraction_result, "spec_result":spec_result}
         print("Stored extraction result for prompt:", prompt)
 
         # 3. Electronics Design (Schematic, Instructions, Code)
@@ -164,8 +164,9 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
 
     try:
         # Retrieve extraction result stored by /process-pipeline
-        extraction = results.get(prompt)
-        if not extraction:
+        extraction = results.get(prompt, {}).get("extraction_result")
+        spec = results.get(prompt, {}).get("spec_result")
+        if not extraction or not spec:
             raise HTTPException(
                 status_code=400,
                 detail="No pipeline data found for this prompt. Run /process-pipeline first."
@@ -179,15 +180,32 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
             component_files=comps if comps else None  # names of the stl we're looking for
         )
 
+        electronics_output = await electronics_agent.generate_design(
+            spec=spec,
+            extraction=extraction,
+        )
+
+
+        # dont know if supabase stuff is needed
         supabase_payload = {
             "prompt": prompt,
             "design_stl_file": assembly_output.stl_housing_base64,
         }
         supabase_service.save_data("pipeline_results", supabase_payload)
 
+        # Get the verification results
+        verification_result = await electronics_agent.verify_verilog(prompt)
+        # Get the ino (code) file
+        ino_file = electronics_agent._generate_firmware(
+            spec=spec,
+            components=comps,
+        )
+
         return JSONResponse(content={
             "prompt": prompt,
             "design_stl_file": assembly_output.stl_full_base64,
+            "verification_results": verification_result,
+            "ino_file": ino_file,
         })
 
     except Exception as e:
