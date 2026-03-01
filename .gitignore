@@ -1,0 +1,9 @@
+.env
+*.pyc
+*/venv
+.venv
+*/cad_library/assembled
+.DS_Store*
+node_modules/
+package-lock.json
+package.json
