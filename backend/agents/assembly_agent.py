@@ -16,6 +16,7 @@ from typing import List, Optional
 from datetime import datetime
 
 import anthropic
+import httpx
 from dotenv import load_dotenv
 
 from schemas.agent_schemas import (
@@ -53,6 +54,7 @@ class AssemblyAgent:
         user_prompt: str,
         schematic_paths: Optional[List[str]] = None,
         component_files: Optional[List[str]] = None,
+        component_stl_urls: Optional[List[str]] = None,
         wall_thickness: float = 2.0,
         clearance: float = 1.0,
     ) -> AssemblyOutput:
@@ -66,105 +68,161 @@ class AssemblyAgent:
         component_files : list[str] | None
             Explicit list of STL filenames inside cad_library/components.
             If None, every STL in the directory is used.
+        component_stl_urls : list[str] | None
+            Public URLs of STL files stored in Supabase (data_output.component_stls).
+            Each file is downloaded into cad_library/components before assembly
+            and removed afterwards.
         wall_thickness : float
             Default enclosure wall thickness in mm.
         clearance : float
             Minimum clearance between components in mm.
         """
 
-        # 1. Discover and measure components
-        all_bounds = load_all_components(COMPONENTS_DIR)
-        if component_files:
-            all_bounds = [b for b in all_bounds if b.filename in component_files]
+        # 1a. Download STLs from Supabase URLs into COMPONENTS_DIR
+        downloaded_files: List[str] = []
+        if component_stl_urls:
+            downloaded_files = await self._download_stls_from_urls(component_stl_urls)
 
-        if not all_bounds:
-            raise ValueError("No STL components found in cad_library/components/")
+        try:
+            # 1b. Discover and measure components
+            all_bounds = load_all_components(COMPONENTS_DIR)
+            if component_files:
+                all_bounds = [b for b in all_bounds if b.filename in component_files]
 
-        bounds_map = {b.filename: b for b in all_bounds}
+            if not all_bounds:
+                raise ValueError("No STL components found in cad_library/components/")
 
-        # 2. Build the messages payload
-        messages = self._build_messages(
-            user_prompt=user_prompt,
-            bounds=all_bounds,
-            schematic_paths=schematic_paths or [],
-            wall_thickness=wall_thickness,
-            clearance=clearance,
-        )
+            bounds_map = {b.filename: b for b in all_bounds}
 
-        # 3. Call Claude with tool use
-        response = self.client.messages.create(
+            # 2. Build the messages payload
+            messages = self._build_messages(
+                user_prompt=user_prompt,
+                bounds=all_bounds,
+                schematic_paths=schematic_paths or [],
+                wall_thickness=wall_thickness,
+                clearance=clearance,
+            )
+
+            # 3. Call Claude with tool use
+            response = self.client.messages.create(
             model=self.model,
             max_tokens=8192,
             system=self._system_prompt(),
             messages=messages,
-            tools=[self._assembly_tool_schema()],
-            tool_choice={"type": "tool", "name": "output_assembly"},
-        )
-
-        tool_use = next(b for b in response.content if b.type == "tool_use")
-        data = tool_use.input
-
-        # 4. Extract placements and run all geometry checks
-        placements_raw = data.get("placements", [])
-        housing_dims = data.get("housing_dimensions", [0, 0, 0])
-        standoff_h = data.get("standoff_height", 4.0)
-        overlap_free = check_overlap(placements_raw, bounds_map)
-
-        # 4b. Check components are inside the housing
-        components_inside, bound_violations = check_components_in_bounds(
-            placements_raw, bounds_map, housing_dims, wall_thickness
-        )
-
-        # 4c. Physical feasibility — no floating parts
-        physically_feasible, feasibility_violations = check_physical_feasibility(
-            placements_raw, bounds_map, housing_dims, wall_thickness,
-            standoff_height=standoff_h,
-        )
-
-        # Retry once if any check fails
-        violations = bound_violations + feasibility_violations
-        if not overlap_free or not components_inside or not physically_feasible:
-            data, overlap_free, components_inside, physically_feasible = await self._retry_fix_issues(
-                data, all_bounds, bounds_map, user_prompt,
-                wall_thickness, clearance, overlap_free,
-                components_inside, physically_feasible, violations,
+                tools=[self._assembly_tool_schema()],
+                tool_choice={"type": "tool", "name": "output_assembly"},
             )
+
+            tool_use = next(b for b in response.content if b.type == "tool_use")
+            data = tool_use.input
+
+            # 4. Extract placements and run all geometry checks
             placements_raw = data.get("placements", [])
             housing_dims = data.get("housing_dimensions", [0, 0, 0])
+            standoff_h = data.get("standoff_height", 4.0)
+            overlap_free = check_overlap(placements_raw, bounds_map)
 
-        # 5. Build the full OpenSCAD script (Claude provides it, but we
-        #    ensure import paths are absolute so openscad can resolve them)
-        openscad_code = self._fixup_import_paths(data.get("openscad_code", ""))
+            # 4b. Check components are inside the housing
+            components_inside, bound_violations = check_components_in_bounds(
+                placements_raw, bounds_map, housing_dims, wall_thickness
+            )
 
-        # 6. Save .scad file
-        os.makedirs(ASSEMBLED_DIR, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        scad_filename = f"assembly_{timestamp}.scad"
-        scad_path = os.path.join(ASSEMBLED_DIR, scad_filename)
-        with open(scad_path, "w") as f:
-            f.write(openscad_code)
+            # 4c. Physical feasibility — no floating parts
+            physically_feasible, feasibility_violations = check_physical_feasibility(
+                placements_raw, bounds_map, housing_dims, wall_thickness,
+                standoff_height=standoff_h,
+            )
 
-        # 7. Export STLs (full assembly + housing-only) and render preview
-        stl_full_path, stl_housing_path = self._export_stls(scad_path)
-        preview_path = self._render_preview(scad_path)
+            # Retry once if any check fails
+            violations = bound_violations + feasibility_violations
+            if not overlap_free or not components_inside or not physically_feasible:
+                data, overlap_free, components_inside, physically_feasible = await self._retry_fix_issues(
+                    data, all_bounds, bounds_map, user_prompt,
+                    wall_thickness, clearance, overlap_free,
+                    components_inside, physically_feasible, violations,
+                )
+                placements_raw = data.get("placements", [])
+                housing_dims = data.get("housing_dimensions", [0, 0, 0])
 
-        # 8. Assemble output
-        placements = [ComponentPlacement(**p) for p in placements_raw]
-        housing_dims = data.get("housing_dimensions", [0, 0, 0])
+            # 5. Build the full OpenSCAD script (Claude provides it, but we
+            #    ensure import paths are absolute so openscad can resolve them)
+            openscad_code = self._fixup_import_paths(data.get("openscad_code", ""))
 
-        return AssemblyOutput(
-            openscad_code=openscad_code,
-            scad_file_path=scad_path,
-            stl_full_path=stl_full_path,
-            stl_housing_path=stl_housing_path,
-            placements=placements,
-            housing_dimensions=housing_dims,
-            overlap_free=overlap_free,
-            components_inside=components_inside,
-            physically_feasible=physically_feasible,
-            preview_png_path=preview_path,
-            design_notes=data.get("design_notes", ""),
-        )
+            # 6. Save .scad file
+            os.makedirs(ASSEMBLED_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            scad_filename = f"assembly_{timestamp}.scad"
+            scad_path = os.path.join(ASSEMBLED_DIR, scad_filename)
+            with open(scad_path, "w") as f:
+                f.write(openscad_code)
+
+            # 7. Export STLs (full assembly + housing-only) and render preview
+            stl_full_path, stl_housing_path = self._export_stls(scad_path)
+            preview_path = self._render_preview(scad_path)
+
+            # 7b. Encode exported STLs as base64 for API response
+            stl_full_base64 = None
+            stl_housing_base64 = None
+            if stl_full_path and os.path.isfile(stl_full_path):
+                with open(stl_full_path, "rb") as f:
+                    stl_full_base64 = base64.b64encode(f.read()).decode("utf-8")
+            if stl_housing_path and os.path.isfile(stl_housing_path):
+                with open(stl_housing_path, "rb") as f:
+                    stl_housing_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+            # 8. Assemble output
+            placements = [ComponentPlacement(**p) for p in placements_raw]
+            housing_dims = data.get("housing_dimensions", [0, 0, 0])
+
+            return AssemblyOutput(
+                openscad_code=openscad_code,
+                scad_file_path=scad_path,
+                stl_full_path=stl_full_path,
+                stl_housing_path=stl_housing_path,
+                stl_full_base64=stl_full_base64,
+                stl_housing_base64=stl_housing_base64,
+                placements=placements,
+                housing_dimensions=housing_dims,
+                overlap_free=overlap_free,
+                components_inside=components_inside,
+                physically_feasible=physically_feasible,
+                preview_png_path=preview_path,
+                design_notes=data.get("design_notes", ""),
+            )
+
+        finally:
+            # Clean up any STLs that were downloaded from Supabase URLs
+            for fpath in downloaded_files:
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+
+    # ── STL downloader ──────────────────────────────────────────────
+
+    @staticmethod
+    async def _download_stls_from_urls(urls: List[str]) -> List[str]:
+        """
+        Download STL files from Supabase public URLs into COMPONENTS_DIR.
+        Returns a list of local file paths that were written so they can
+        be cleaned up after assembly.
+        """
+        os.makedirs(COMPONENTS_DIR, exist_ok=True)
+        downloaded: List[str] = []
+        async with httpx.AsyncClient(timeout=30) as client:
+            for url in urls:
+                try:
+                    filename = os.path.basename(url.split("?")[0])  # strip query params
+                    if not filename.lower().endswith(".stl"):
+                        filename += ".stl"
+                    dest = os.path.join(COMPONENTS_DIR, filename)
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    with open(dest, "wb") as f:
+                        f.write(response.content)
+                    print(f"Downloaded STL from Supabase: {url} → {dest}")
+                    downloaded.append(dest)
+                except Exception as e:
+                    print(f"Warning: could not download STL from {url}: {e}")
+        return downloaded
 
     # ── prompts & tool schema ───────────────────────────────────────
 

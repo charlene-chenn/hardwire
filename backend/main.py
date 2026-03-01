@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import os
 import asyncio
@@ -86,12 +87,14 @@ async def design_assembly(
     wall_thickness: float = Form(2.0),
     clearance: float = Form(1.0),
     component_files: Optional[str] = Form(None, description="Comma-separated STL filenames, or omit to use all"),
+    component_stl_urls: Optional[str] = Form(None, description="Comma-separated Supabase STL URLs (from data_output.component_stls)"),
     schematics: List[UploadFile] = File(default=[]),
 ) -> Dict[str, Any]:
     """
     Assembly Agent endpoint.
-    Reads STLs from cad_library/components, accepts optional schematic uploads
-    and a text prompt, then generates an OpenSCAD assembly with housing.
+    Reads STLs from cad_library/components or downloads them from Supabase URLs,
+    accepts optional schematic uploads and a text prompt, then generates an
+    OpenSCAD assembly with housing.
     """
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set.")
@@ -113,10 +116,16 @@ async def design_assembly(
         if component_files:
             comp_files = [c.strip() for c in component_files.split(",") if c.strip()]
 
+        # Parse optional Supabase STL URLs
+        stl_urls = None
+        if component_stl_urls:
+            stl_urls = [u.strip() for u in component_stl_urls.split(",") if u.strip()]
+
         result: AssemblyOutput = await assembly_agent.design_assembly(
             user_prompt=prompt,
             schematic_paths=schematic_paths if schematic_paths else None,
             component_files=comp_files,
+            component_stl_urls=stl_urls,
             wall_thickness=wall_thickness,
             clearance=clearance,
         )
@@ -140,36 +149,27 @@ async def design_assembly(
 @app.post("/stl-model")
 async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
     """
-    Stl model generation entry point.
+    STL model generation entry point.
+    Returns base64-encoded STL in the JSON response body.
     """
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set.")
 
     try:
-        # Run agents in parallel
-        # Note: In a production environment, you might use a task queue or background tasks.
-        results = await asyncio.gather(
-            assembly_agent.design_assembly(prompt)
+        assembly_output: AssemblyOutput = await assembly_agent.design_assembly(
+            user_prompt=prompt
         )
-
-        # Might need to add getting result 1 depending on how we r getting the stl files
-        supabase_assembly_result = results[3]
-        assembly_result = results[2]
-
-        combined_payload = {
-            "prompt": prompt,
-            "design_stl_file":assembly_result
-        }
 
         supabase_payload = {
             "prompt": prompt,
-            "design_stl_file":supabase_assembly_result
+            "design_stl_file": assembly_output.stl_housing_base64,
         }
+        supabase_service.save_data("pipeline_results_abc", supabase_payload)
 
-        # Save to Supabase (Mocked if no credentials)
-        supabase_service.save_data("pipeline_results_stl_files", supabase_payload)
-
-        return combined_payload
+        return JSONResponse(content={
+            "prompt": prompt,
+            "design_stl_file": assembly_output.stl_full_base64,
+        })
 
     except Exception as e:
         import traceback

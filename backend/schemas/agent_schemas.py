@@ -59,6 +59,8 @@ class AssemblyOutput(BaseModel):
     scad_file_path: str = Field(description="Path where the .scad file was saved")
     stl_full_path: Optional[str] = Field(default=None, description="STL of full assembly (housing + electronics)")
     stl_housing_path: Optional[str] = Field(default=None, description="STL of housing only (no electronics)")
+    stl_full_base64: Optional[str] = Field(default=None, description="Base64-encoded STL of full assembly")
+    stl_housing_base64: Optional[str] = Field(default=None, description="Base64-encoded STL of housing only")
     placements: List[ComponentPlacement] = Field(description="Placement details for every component")
     housing_dimensions: List[float] = Field(description="[width, depth, height] of the generated housing in mm")
     overlap_free: bool = Field(description="Whether all placements passed the overlap check")

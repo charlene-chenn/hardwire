@@ -8,7 +8,7 @@ import asyncio
 import uuid
 from fpdf import FPDF
 from dotenv import load_dotenv
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from schemas.agent_schemas import (
     DataExtractionOutput, 
     SpecGeneratorOutput, 
