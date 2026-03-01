@@ -500,11 +500,12 @@ class ElectronicsAgent:
 
         # 3. LLM Evaluation
         system_prompt = (
-            "You are an expert HDL verification engineer. "
-            "Your task is to evaluate a piece of Verilog code against a natural language design prompt. "
-            "Provide a score from 0 to 100 based on functional correctness, completeness, and style. "
-            "If the code has syntax errors (which will be provided), the score should be significantly lower. "
-            "Output your evaluation in JSON format with the following keys: 'score', 'explanation', 'is_syntactically_correct'."
+            "You are a helpful electronics coach reviewing a beginner's Verilog design. "
+            "Evaluate the code against the design prompt and return a score from 0 to 100. "
+            "Keep your feedback short and encouraging — the audience is amateur builders. "
+            "Provide exactly 5 concise, actionable next steps (no strengths/weaknesses lists). "
+            "Output ONLY valid JSON with these keys: 'score' (int), 'explanation' (1-2 sentences max), "
+            "'next_steps' (array of exactly 5 short action strings), 'is_syntactically_correct' (bool)."
         )
         
         user_prompt = (
@@ -534,6 +535,7 @@ class ElectronicsAgent:
             # Ensure keys exist
             evaluation.setdefault("score", 0)
             evaluation.setdefault("explanation", "Could not parse evaluation.")
+            evaluation.setdefault("next_steps", [])
             evaluation.setdefault("is_syntactically_correct", syntax_ok)
             
             return evaluation
