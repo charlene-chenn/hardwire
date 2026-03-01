@@ -31,12 +31,12 @@ export default function Results() {
   const location = useLocation();
   const reply = location.state?.reply || 'No response yet. Go back and run a query.';
   const prompt = location.state?.prompt;
-  const [stlUrl, setStlUrl] = React.useState(location.state?.stlUrl || DEFAULT_STL_URL);
-  const [loading, setLoading] = React.useState(false);
+  const [stlUrl, setStlUrl] = React.useState(location.state?.stlUrl || (prompt ? null : DEFAULT_STL_URL));
+  const [loading, setLoading] = React.useState(!!prompt && !location.state?.stlUrl);
   const objectUrlRef = React.useRef(null);
 
   React.useEffect(() => {
-    if (prompt) {
+    if (prompt && !location.state?.stlUrl) {
       const fetchSTL = async () => {
         setLoading(true);
         try {
@@ -88,15 +88,20 @@ export default function Results() {
             <div className="loading-text">Generating Model...</div>
           </div>
         )}
-        <Canvas camera={{ position: [0, 0, 50] }}>
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[5, 5, 5]} intensity={1} />
-          <Suspense fallback={<mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color="#333" wireframe /></mesh>}>
-            <STLModel url={stlUrl} />
-            <Environment preset="city" />
-          </Suspense>
-          <OrbitControls enablePan enableZoom enableRotate autoRotate autoRotateSpeed={2} />
-        </Canvas>
+
+        {!loading && stlUrl ? (
+          <Canvas camera={{ position: [0, 0, 50] }}>
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[5, 5, 5]} intensity={1} />
+            <Suspense fallback={<mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color="#333" wireframe /></mesh>}>
+              <STLModel url={stlUrl} />
+              <Environment preset="city" />
+            </Suspense>
+            <OrbitControls enablePan enableZoom enableRotate autoRotate autoRotateSpeed={2} />
+          </Canvas>
+        ) : (
+          !loading && <div className="no-model-text">No model available.</div>
+        )}
       </div>
 
       {/* RIGHT — Text + Code */}
