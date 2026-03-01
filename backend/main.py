@@ -185,7 +185,6 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
             extraction=extraction,
         )
 
-
         # dont know if supabase stuff is needed
         supabase_payload = {
             "prompt": prompt,
