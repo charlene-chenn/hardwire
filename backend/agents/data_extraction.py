@@ -1,6 +1,5 @@
 import os
 import anthropic
-import base64
 from dotenv import load_dotenv
 from backend.schemas.agent_schemas import DataExtractionOutput, ComponentRecommendation
 from backend.services.search_service import SearchService
@@ -67,71 +66,37 @@ class DataExtractionAgent:
             ds_urls = await self.search_service.search_datasheets(comp)
             stl_urls = await self.search_service.search_stls(comp)
             
-            # Download and Upload Datasheets
-            for i, url in enumerate(ds_urls):
-                # Skip common non-direct links if they don't look like PDFs
-                if any(x in url.lower() for x in [".html", ".php", "/search", "/category"]):
-                    if not url.lower().endswith(".pdf"):
-                        print(f"Skipping likely non-direct PDF link: {url}")
-                        continue
+            # Save direct datasheet download URL only (.pdf)
+            for url in ds_urls:
+                if not url.lower().endswith(".pdf"):
+                    print(f"Skipping non-direct PDF link: {url}")
+                    continue
+                print(f"Saving datasheet URL: {url}")
+                all_datasheets.append(url)
+                self.supabase.save_data("component_assets", {
+                    "component_name": comp,
+                    "asset_type": "datasheet",
+                    "url": url,
+                    "label": clean_comp,
+                    "content_base64": None,
+                })
+                break
 
-                print(f"Downloading datasheet: {url}")
-                content = await self.search_service.download_file(url)
-                if content:
-                    # Verify it's actually a PDF
-                    if content.startswith(b"%PDF"):
-                        # Save as base64
-                        content_64 = base64.b64encode(content).decode('utf-8')
-                        datasheet_contents.append(content_64)
-                        
-                        filename = f"datasheets/{clean_comp}.pdf"
-                        storage_url = await self.supabase.upload_file("hardware_assets", filename, content)
-                        if storage_url:
-                            all_datasheets.append(storage_url)
-                            self.supabase.save_data("component_assets", {
-                                "component_name": comp,
-                                "asset_type": "datasheet",
-                                "url": storage_url,
-                                "label": clean_comp,
-                                "content_base64": content_64,
-                            })
-                        else:
-                            all_datasheets.append(url)
-                        break
-                    else:
-                        print(f"Downloaded content from {url} was not a valid PDF.")
-
-            # Download and Upload STLs
-            for i, url in enumerate(stl_urls):
-                # Skip likely landing pages
-                if any(x in url.lower() for x in [".html", ".php", "/parts", "/libraries"]):
-                    if not url.lower().endswith(".stl"):
-                        print(f"Skipping likely non-direct STL link: {url}")
-                        continue
-
-                print(f"Downloading STL/Model: {url}")
-                content = await self.search_service.download_file(url)
-                if content:
-                    # Basic check if it's likely a binary STL or ASCII STL
-                    is_stl = b"solid" in content[:100].lower() or len(content) > 80
-                    if is_stl:
-                        # Save as base64
-                        stl_contents.append(base64.b64encode(content).decode('utf-8'))
-
-                        filename = f"stls/{clean_comp}.stl"
-                        storage_url = await self.supabase.upload_file("hardware_assets", filename, content)
-                        if storage_url:
-                            all_stls.append(storage_url)
-                            self.supabase.save_data("component_assets", {
-                                "component_name": comp,
-                                "asset_type": "stl",
-                                "url": storage_url,
-                                "label": clean_comp,
-                                "content_base64": base64.b64encode(content).decode('utf-8'),
-                            })
-                        else:
-                            all_stls.append(url)
-                        break
+            # Save direct STL download URL only (.stl)
+            for url in stl_urls:
+                if not url.lower().endswith(".stl"):
+                    print(f"Skipping non-direct STL link: {url}")
+                    continue
+                print(f"Saving STL URL: {url}")
+                all_stls.append(url)
+                self.supabase.save_data("component_assets", {
+                    "component_name": comp,
+                    "asset_type": "stl",
+                    "url": url,
+                    "label": clean_comp,
+                    "content_base64": None,
+                })
+                break
 
         # 3. Recommend other components
         rec_prompt = (
