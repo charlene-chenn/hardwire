@@ -86,8 +86,11 @@ class AssemblyAgent:
         try:
             # 1b. Discover and measure components
             all_bounds = load_all_components(COMPONENTS_DIR)
+            print("all_bounds:",all_bounds)
             if component_files:
-                all_bounds = [b for b in all_bounds if b.filename in component_files]
+                normalised = [a.lower().replace(" ", "_") for a in component_files]
+                all_bounds = [b for b in all_bounds 
+                    if b.filename.replace(".stl", "") in normalised]
 
             if not all_bounds:
                 raise ValueError("No STL components found in cad_library/components/")
