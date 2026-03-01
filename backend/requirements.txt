@@ -6,6 +6,7 @@ python-dotenv
 httpx
 beautifulsoup4
 pydantic
-googlesearch-python
+tavily-python
+fpdf2
 numpy-stl
 python-multipart

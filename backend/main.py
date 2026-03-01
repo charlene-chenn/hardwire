@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional
 from backend.schemas.agent_schemas import DataExtractionOutput, SpecGeneratorOutput, AssemblyOutput
 from backend.agents.data_extraction import DataExtractionAgent
 from backend.agents.spec_generator import SpecGeneratorAgent
+from backend.agents.electronics_agent import ElectronicsAgent
 from backend.agents.assembly_agent import AssemblyAgent
 from backend.services.supabase_service import SupabaseService
 
@@ -17,6 +18,7 @@ app = FastAPI(title="HARDWIRE Multi-Agent Pipeline")
 # In-memory agent instances
 data_extraction_agent = DataExtractionAgent()
 spec_generator_agent = SpecGeneratorAgent()
+electronics_agent = ElectronicsAgent()
 assembly_agent = AssemblyAgent()
 supabase_service = SupabaseService()
 
@@ -38,18 +40,23 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
         # Note: In a production environment, you might use a task queue or background tasks.
         results = await asyncio.gather(
             data_extraction_agent.extract_and_fetch(prompt),
-            spec_generator_agent.generate_spec(prompt)
+            spec_generator_agent.generate_spec(prompt),
         )
 
         extraction_result = results[0]
         spec_result = results[1]
 
-        # For now, we return both. Later, these will be routed to the 'Electronics Guy'.
-        # We also want to save the final result to Supabase for record keeping.
+        # 3. Electronics Design (Schematic, Instructions, Code)
+        electronics_result = await electronics_agent.generate_design(
+            spec_result, 
+            extraction_result
+        )
+
         combined_payload = {
             "prompt": prompt,
             "extraction": extraction_result.dict(),
-            "spec": spec_result.dict()
+            "spec": spec_result.dict(),
+            "design": electronics_result.dict(),
         }
 
         # Save to Supabase (Mocked if no credentials)
@@ -119,6 +126,42 @@ async def design_assembly(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.post("/stl-model")
+async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
+    """
+    Stl model generation entry point.
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set.")
+
+    try:
+        # Run agents in parallel
+        # Note: In a production environment, you might use a task queue or background tasks.
+        results = await asyncio.gather(
+            asssembly_agent.design_assembly(prompt)
+        )
+
+        # Might need to add getting result 1 depending on how we r getting the stl files
+        supabase_assembly_result = results.stl_housing_path
+        assmebly_result = results.stl_full_path
+
+        combined_payload = {
+            "prompt": prompt,
+            "design_stl_file":assmebly_result
+        }
+
+        supabase_payload = {
+            "prompt": prompt,
+            "design_stl_file":supabase_assembly_result
+        }
+
+        # Save to Supabase (Mocked if no credentials)
+        supabase_service.save_data("pipeline_results_stl_files", supabase_payload)
+
+        return combined_payload
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

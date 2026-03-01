@@ -23,7 +23,7 @@ class SupabaseService:
             return f"mock_url://{bucket}/{path}"
 
         try:
-            res = self.client.storage.from_(bucket).upload(path, content)
+            res = self.client.storage.from_(bucket).upload(path, content, file_options={"upsert": "true"})
             # Get public URL
             public_url = self.client.storage.from_(bucket).get_public_url(path)
             return public_url

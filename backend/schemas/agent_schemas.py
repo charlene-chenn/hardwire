@@ -15,6 +15,8 @@ class ComponentRecommendation(BaseModel):
 class DataExtractionOutput(BaseModel):
     datasheet_pdfs: List[str]  # URLs or storage paths
     component_stls: List[str]  # URLs or storage paths
+    datasheet_contents: List[str] = []  # base64-encoded PDF contents
+    stl_contents: List[str] = []  # base64-encoded STL contents
     recommendations: List[ComponentRecommendation]
     metadata: dict
 
@@ -23,6 +25,12 @@ class SpecGeneratorOutput(BaseModel):
     parts_required: List[str]
     viable: bool
     reasoning: str
+
+class ElectronicsOutput(BaseModel):
+    schematic_pdf_url: str
+    instructions: str
+    code: str
+    metadata: dict
 
 
 # ── Assembly Agent Schemas ──────────────────────────────────────────
