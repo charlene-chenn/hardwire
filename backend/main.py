@@ -64,21 +64,33 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
         results[prompt] = {"extraction_result":extraction_result, "spec_result":spec_result}
         print("Stored extraction result for prompt:", prompt)
 
-        # 3. Electronics Design (Verilog → Yosys → RTL schematic, firmware)
-        electronics_result = await electronics_agent.generate_design(
-            spec_result,
-            extraction_result,
+        # Electronics: Verilog → Yosys → firmware + verification
+        # Runs here so the frontend can show firmware/schematics before the STL loads.
+        electronics_result = await electronics_agent.generate_design(spec_result, extraction_result)
+        verification_result = await electronics_agent.verify_verilog(
+            prompt, verilog_code=electronics_result.code
         )
+
+        # Store for /stl-model to use
+        results[prompt]["electronics_result"] = electronics_result
+        results[prompt]["verification_result"] = verification_result
 
         combined_payload = {
             "prompt": prompt,
             "extraction": extraction_result.dict(),
             "spec": spec_result.dict(),
-            "electronics": electronics_result.dict(),
+            "firmware_code": electronics_result.firmware_code,
+            "verilog_code": electronics_result.code,
+            "rtl_schematic": electronics_result.instructions,
+            "verification_results": verification_result,
         }
 
         # Save to Supabase (Mocked if no credentials)
-        supabase_service.save_data("pipeline_results", combined_payload)
+        supabase_service.save_data("pipeline_results", {
+            "prompt": prompt,
+            "extraction": extraction_result.dict(),
+            "spec": spec_result.dict(),
+        })
 
         return combined_payload
 
@@ -180,35 +192,9 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
             component_files=comps if comps else None  # names of the stl we're looking for
         )
 
-        electronics_output = await electronics_agent.generate_design(
-            spec=spec,
-            extraction=extraction,
-        )
-
-        # dont know if supabase stuff is needed
-        supabase_payload = {
-            "prompt": prompt,
-            "design_stl_file": assembly_output.stl_housing_base64,
-        }
-        supabase_service.save_data("pipeline_results", supabase_payload)
-
-        # Get the verification results
-        verification_result = await electronics_agent.verify_verilog(prompt)
-        # Get the ino (code) file
-        ino_file = electronics_agent._generate_firmware(
-            spec=spec,
-            components=comps,
-        )
-
         return JSONResponse(content={
             "prompt": prompt,
             "design_stl_file": assembly_output.stl_full_base64,
-            "schematic_url": electronics_output.schematic_pdf_url,
-            "verilog_code": electronics_output.code,
-            "firmware_code": electronics_output.firmware_code,
-            "rtl_schematic": electronics_output.instructions,
-            "verification_results": verification_result,
-            "ino_file": ino_file,
         })
 
     except Exception as e:

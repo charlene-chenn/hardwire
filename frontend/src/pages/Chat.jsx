@@ -18,7 +18,7 @@ export default function Chat() {
   const examplePrompts = [
     "Design a robotic arm joint with high torque.",
     "Generate an ESP32 enclosure with cooling vents.",
-    "Create a custom gearbox for a small drone."
+    "Create a plant pot with an Arduino Uno and DHT22."
   ];
   const bottomRef = useRef(null);
 
@@ -44,7 +44,6 @@ export default function Chat() {
     }, 2000);
 
     try {
-      // 🔌 REPLACE THIS URL with your actual backend endpoint
       const response = await fetch('http://localhost:8000/process-pipeline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,10 +52,18 @@ export default function Chat() {
 
       const data = await response.json();
 
-      // Navigate to results after LLM responds with a 1s delay
+      // Navigate to results — pass electronics data so panels populate immediately
       setTimeout(() => {
         clearInterval(interval);
-        navigate('/results', { state: { reply: data.reply, prompt: input.trim() } });
+        navigate('/results', {
+          state: {
+            prompt: input.trim(),
+            verificationData: data.verification_results || null,
+            inoFile: data.firmware_code || null,
+            verilogCode: data.verilog_code || null,
+            rtlSchematic: data.rtl_schematic || null,
+          },
+        });
       }, 1000);
     } catch (err) {
       clearInterval(interval);
@@ -135,4 +142,3 @@ export default function Chat() {
     </div>
   );
 }
-

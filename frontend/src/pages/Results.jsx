@@ -11,7 +11,7 @@ import STLModel from '../components/STLModel';
  *   (Assets in `public/` are served from the root `/` in the browser).
  * - SUPABASE: Use the full public URL from your Supabase bucket.
  */
-const DEFAULT_STL_URL = '/models/ESP32.stl'; // This will resolve to public/models/test.stl
+const DEFAULT_STL_URL = '/models/assembly.stl'; // This will resolve to public/models/test.stl
 
 // Example generated code — replace with data from your backend
 const EXAMPLE_CODE = `# Hardwire configuration
@@ -29,12 +29,12 @@ model.export("output.stl")
 
 export default function Results() {
   const location = useLocation();
-  const reply = location.state?.reply || 'No response yet. Go back and run a query.';
   const prompt = location.state?.prompt;
-  const [stlUrl, setStlUrl] = React.useState(location.state?.stlUrl || (prompt ? null : DEFAULT_STL_URL));
+  const [stlUrl, setStlUrl] = React.useState(DEFAULT_STL_URL);
   const [loading, setLoading] = React.useState(!!prompt && !location.state?.stlUrl);
-  const [verificationData, setVerificationData] = React.useState(null);
-  const [inoFile, setInoFile] = React.useState(null);
+  // Pre-populated from nav state — available immediately before STL loads
+  const verificationData = location.state?.verificationData || null;
+  const inoFile = location.state?.inoFile || null;
   const objectUrlRef = React.useRef(null);
   const [expandedBlock, setExpandedBlock] = React.useState(null);
 
@@ -65,15 +65,10 @@ export default function Results() {
               bytes[i] = binary.charCodeAt(i);
             }
             const blob = new Blob([bytes], { type: 'application/octet-stream' });
-            // Revoke previous object URL to avoid memory leaks
             if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
             const objUrl = URL.createObjectURL(blob);
             objectUrlRef.current = objUrl;
             setStlUrl(objUrl);
-
-            // Store other metadata
-            if (data.verification_results) setVerificationData(data.verification_results);
-            if (data.ino_file) setInoFile(data.ino_file);
           } else {
             console.warn('API returned no STL file, using default.');
             setStlUrl(DEFAULT_STL_URL);
@@ -150,7 +145,7 @@ export default function Results() {
                 <p style={{ whiteSpace: 'pre-wrap' }}>{verificationData.explanation}</p>
               </div>
             ) : (
-              <p>{reply}</p>
+              <p>No schematic data available.</p>
             )}
           </div>
         </div>
