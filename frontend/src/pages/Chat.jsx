@@ -8,6 +8,13 @@ export default function Chat() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Thinking...');
+  const thinkingMessages = [
+    'Analyzing your request...',
+    'Designing the component...',
+    'Optimizing parameters...',
+    'Almost there...',
+  ];
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -22,6 +29,14 @@ export default function Chat() {
     setMessages(updatedMessages);
     setInput('');
     setLoading(true);
+    setLoadingMessage(thinkingMessages[0]);
+
+    const interval = setInterval(() => {
+      setLoadingMessage(prev => {
+        const currentIdx = thinkingMessages.indexOf(prev);
+        return thinkingMessages[(currentIdx + 1) % thinkingMessages.length];
+      });
+    }, 2000);
 
     try {
       // 🔌 REPLACE THIS URL with your actual backend endpoint
@@ -32,18 +47,19 @@ export default function Chat() {
       });
 
       const data = await response.json();
-      //const assistantMessage = { role: 'assistant', content: data.reply };
-      //setMessages(prev => [...prev, assistantMessage]);
 
-      // Navigate to results after LLM responds
-      setTimeout(() => navigate('/results', { state: { reply: data.reply, prompt: input.trim() } }), 800);
+      // Navigate to results after LLM responds with a 1s delay
+      setTimeout(() => {
+        clearInterval(interval);
+        navigate('/results', { state: { reply: data.reply, prompt: input.trim() } });
+      }, 1000);
     } catch (err) {
+      clearInterval(interval);
       console.error('Backend error:', err);
       setMessages(prev => [
         ...prev,
         { role: 'assistant', content: 'Error connecting to backend. Check your API endpoint.' }
       ]);
-    } finally {
       setLoading(false);
     }
   };
@@ -67,7 +83,7 @@ export default function Chat() {
         ))}
         {loading && (
           <div className="chat-message assistant">
-            <span className="bubble" style={{ color: '#888' }}>Thinking…</span>
+            <span className="bubble" style={{ color: '#888' }}>{loadingMessage}</span>
           </div>
         )}
         <div ref={bottomRef} />
