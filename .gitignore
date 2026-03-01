@@ -1,2 +1,5 @@
 .env
 *.pyc
+.venv
+backend/cad_library/assembled
+.DS_Store*
