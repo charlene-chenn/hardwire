@@ -30,6 +30,7 @@ class ElectronicsOutput(BaseModel):
     schematic_pdf_url: str
     instructions: str
     code: str
+    firmware_code: str = ""
     metadata: dict
 
 
