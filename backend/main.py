@@ -30,7 +30,7 @@ app.add_middleware(
 # In-memory agent instances
 data_extraction_agent = DataExtractionAgent()
 spec_generator_agent = SpecGeneratorAgent()
-electronics_agent = ElectronicsAgent()
+electronics_agent = ElectronicsAgent()   # reads NEMOTRON_ENABLED from .env
 assembly_agent = AssemblyAgent()
 supabase_service = SupabaseService()
 results: Dict[str, Any] = {}  # In-memory store keyed by prompt
@@ -64,17 +64,17 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
         results[prompt] = {"extraction_result":extraction_result, "spec_result":spec_result}
         print("Stored extraction result for prompt:", prompt)
 
-        # 3. Electronics Design (Schematic, Instructions, Code)
-        # electronics_result = await electronics_agent.generate_design(
-        #     spec_result, 
-        #     extraction_result
-        # )
+        # 3. Electronics Design (Verilog → Yosys → RTL schematic, firmware)
+        electronics_result = await electronics_agent.generate_design(
+            spec_result,
+            extraction_result,
+        )
 
         combined_payload = {
             "prompt": prompt,
             "extraction": extraction_result.dict(),
-            "spec": spec_result.dict()
-            # "design": electronics_result.dict(),
+            "spec": spec_result.dict(),
+            "electronics": electronics_result.dict(),
         }
 
         # Save to Supabase (Mocked if no credentials)
@@ -204,6 +204,10 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
         return JSONResponse(content={
             "prompt": prompt,
             "design_stl_file": assembly_output.stl_full_base64,
+            "schematic_url": electronics_output.schematic_pdf_url,
+            "verilog_code": electronics_output.code,
+            "firmware_code": electronics_output.firmware_code,
+            "rtl_schematic": electronics_output.instructions,
             "verification_results": verification_result,
             "ino_file": ino_file,
         })
