@@ -33,6 +33,7 @@ export default function Results() {
   const prompt = location.state?.prompt;
   const [stlUrl, setStlUrl] = React.useState(location.state?.stlUrl || DEFAULT_STL_URL);
   const [loading, setLoading] = React.useState(false);
+  const objectUrlRef = React.useRef(null);
 
   React.useEffect(() => {
     if (prompt) {
@@ -46,7 +47,18 @@ export default function Results() {
           });
           const data = await response.json();
           if (data && data.design_stl_file) {
-            setStlUrl(data.design_stl_file);
+            // Convert base64 → Blob → object URL so STLLoader can read it
+            const binary = atob(data.design_stl_file);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: 'application/octet-stream' });
+            // Revoke previous object URL to avoid memory leaks
+            if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+            const objUrl = URL.createObjectURL(blob);
+            objectUrlRef.current = objUrl;
+            setStlUrl(objUrl);
           } else {
             console.warn('API returned no STL file, using default.');
             setStlUrl(DEFAULT_STL_URL);
@@ -60,6 +72,10 @@ export default function Results() {
       };
       fetchSTL();
     }
+    // Revoke object URL on unmount
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
   }, [prompt]);
 
   return (
