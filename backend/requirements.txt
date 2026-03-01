@@ -4,6 +4,7 @@ anthropic
 supabase
 python-dotenv
 httpx
+openai
 beautifulsoup4
 pydantic
 tavily-python

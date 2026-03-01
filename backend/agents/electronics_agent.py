@@ -22,35 +22,49 @@ load_dotenv()
 class ElectronicsAgent:
     DEFAULT_VERILOG_PATH = "/tmp/unified_circuit.txt"
 
-    def __init__(self, use_nemotron: bool = False):
+    def __init__(self, use_nemotron: bool | None = None):
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.model = "claude-sonnet-4-6"
         self.supabase = SupabaseService()
-        self.use_nemotron = use_nemotron
-        self._nemotron_tokenizer = None
-        self._nemotron_model = None
+        self.use_nemotron = self._resolve_use_nemotron(use_nemotron)
+        self.nemotron_endpoint = os.getenv("NEMOTRON_ENDPOINT")  # e.g. http://host:8000/v1
+        self.nemotron_api_key = os.getenv("NEMOTRON_API_KEY", "none")
+        self.nemotron_model = os.getenv("NEMOTRON_MODEL", "nemotron")
 
-    def _load_nemotron(self):
-        """Lazy-load the Nemotron model on first use (4-bit quantized, ~35GB VRAM)."""
-        if self._nemotron_model is None:
-            from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-            import torch
-            model_name = "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF"
-            print(f"Loading {model_name} in 4-bit quantized mode...")
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
-            )
-            self._nemotron_tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self._nemotron_model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                quantization_config=bnb_config,
-                device_map="auto",
-            )
-            print("Nemotron model loaded.")
-        return self._nemotron_tokenizer, self._nemotron_model
+    @staticmethod
+    def _resolve_use_nemotron(explicit_flag: bool | None) -> bool:
+        if explicit_flag is not None:
+            return explicit_flag
+        env_flag = os.getenv("NEMOTRON_ENABLED", "false").strip().lower()
+        return env_flag in {"1", "true", "yes", "on"}
+
+    def _call_nemotron(self, system_prompt: str, user_prompt: str) -> str:
+        """Call the remote Nemotron endpoint using the OpenAI-compatible client."""
+        from openai import OpenAI
+        if not self.nemotron_endpoint:
+            raise ValueError("NEMOTRON_ENDPOINT env var not set.")
+
+        print(f"  Calling Nemotron at {self.nemotron_endpoint} (model={self.nemotron_model}) ...")
+        client = OpenAI(base_url=self.nemotron_endpoint, api_key=self.nemotron_api_key)
+        resp = client.chat.completions.create(
+            model=self.nemotron_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0,
+            max_tokens=4096,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        choice = resp.choices[0]
+        content = choice.message.content
+        print(f"  Nemotron finish_reason: {choice.finish_reason}")
+        print(f"  Nemotron raw content length: {len(content) if content else 0}")
+        if content:
+            print(f"  Nemotron raw content preview: {content[:300]!r}")
+        else:
+            print("  WARNING: Nemotron returned None/empty content!")
+        return (content or "").strip()
 
     # -------------------------------------------------------------------------
     # Step 0: Fetch PDFs from Supabase by component label
@@ -124,10 +138,18 @@ class ElectronicsAgent:
             "reason about how the components connect to each other (shared buses, control signals, power rails) "
             "and generate a single syntactically correct Verilog file that wires them all together. "
             "CRITICAL RULES:\n"
-            "1. Every module that is instantiated MUST be fully defined in the same file.\n"
-            "2. Do NOT reference or instantiate any module that you do not define inline.\n"
-            "3. Use only one top-level module and define all sub-modules below it in the same file.\n"
-            "4. Output ONLY valid Verilog code with no explanation, no markdown, no comments outside the code."
+            "1. Use ONLY Verilog-2001 syntax. Do NOT use SystemVerilog constructs "
+            "   (no 'logic', no 'always_ff', no 'always_comb', no 'interface', no 'typedef', no '::').\n"
+            "2. Use 'reg' and 'wire' for all signal declarations.\n"
+            "3. Every module that is instantiated MUST be fully defined in the same file.\n"
+            "4. Do NOT reference or instantiate any module that you do not define inline.\n"
+            "5. Use only one top-level module and define all sub-modules below it in the same file.\n"
+            "6. PORT CONSISTENCY (most common mistake): Every port name used in a module instantiation "
+            "   (e.g., .clk(clk), .data_out(wire_x)) MUST exactly match a port declared in that module's "
+            "   port list. Before outputting, mentally trace every instantiation and verify each connected "
+            "   port name exists in the target module definition.\n"
+            "7. Start the file directly with the first module keyword (optionally preceded by a `timescale directive). "
+            "   No prose, no explanation, no markdown fences."
         )
 
         datasheets_text = ""
@@ -142,29 +164,17 @@ class ElectronicsAgent:
         )
 
         if self.use_nemotron:
-            tokenizer, model = self._load_nemotron()
-            import torch
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
-            input_ids = tokenizer.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                return_tensors="pt",
-            ).to(model.device)
-            with torch.no_grad():
-                output_ids = model.generate(
-                    input_ids,
-                    max_new_tokens=2048,
-                    temperature=0.1,
-                    do_sample=True,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
-            verilog = tokenizer.decode(
-                output_ids[0][input_ids.shape[1]:],
-                skip_special_tokens=True,
-            )
+            print("  Using Nemotron (remote endpoint)")
+            verilog = self._call_nemotron(system_prompt, user_prompt)
+            # Strip <think>...</think> reasoning blocks if the model emitted them
+            import re as _re
+            verilog = _re.sub(r'(?s)<think>.*?</think>', '', verilog).strip()
+            # Strip markdown code fences if present (e.g. ```verilog ... ```)
+            if verilog.startswith("```"):
+                lines = verilog.split("\n")
+                start = 1
+                end = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
+                verilog = "\n".join(lines[start:end])
         else:
             print("  Using Claude for unified Verilog generation (Nemotron disabled)")
             response = self.client.messages.create(
@@ -180,14 +190,58 @@ class ElectronicsAgent:
                 end = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
                 verilog = "\n".join(lines[start:end])
 
-        return verilog.strip()
+        # Strip any prose/comments before the first actual module declaration.
+        # Match `module` only at the start of a line (not inside inline comments).
+        import re
+        raw_verilog = verilog
+        module_match = re.search(r'(?m)^\s*(`timescale\b.*\n\s*)?module\s+\w+', verilog)
+        if module_match:
+            verilog = verilog[module_match.start():]
+        else:
+            # Fallback: look for any `module` keyword
+            m2 = re.search(r'\bmodule\s+\w+', verilog)
+            if m2:
+                verilog = verilog[m2.start():]
+
+        verilog = verilog.strip()
+
+        if not verilog:
+            print(f"  WARNING: Prose stripping removed all content! Raw response was {len(raw_verilog)} chars.")
+            print(f"  Raw response preview: {raw_verilog[:500]!r}")
+        else:
+            print(f"  Post-strip Verilog preview: {verilog[:200]!r}")
+
+        return verilog
 
     # -------------------------------------------------------------------------
     # Step B: Synthesize Verilog → netlist JSON via Yosys
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _extract_top_module(verilog_code: str) -> Optional[str]:
+    def _sanitize_verilog(verilog_code: str) -> str:
+        """
+        Remove or replace characters that cause Yosys parse errors:
+        - Smart/curly quotes → straight ASCII quotes
+        - Non-ASCII characters → stripped out
+        - Windows line endings → Unix
+        """
+        replacements = {
+            "\u2018": "'", "\u2019": "'",  # left/right single curly quotes
+            "\u201c": '"', "\u201d": '"',  # left/right double curly quotes
+            "\u2014": "--",                # em-dash
+            "\u2013": "-",                 # en-dash
+            "\u00b5": "u",                 # micro sign → u
+        }
+        for bad, good in replacements.items():
+            verilog_code = verilog_code.replace(bad, good)
+        # Strip remaining non-ASCII (outside printable range)
+        verilog_code = verilog_code.encode("ascii", errors="ignore").decode("ascii")
+        # Normalize line endings
+        verilog_code = verilog_code.replace("\r\n", "\n").replace("\r", "\n")
+        return verilog_code
+
+    @staticmethod
+    def _extract_top_module(verilog_code: str) -> str:
         """Return the first module name found in the Verilog source."""
         match = re.search(r'\bmodule\s+(\w+)', verilog_code)
         return match.group(1) if match else None
@@ -195,9 +249,12 @@ class ElectronicsAgent:
     def _synthesize_with_yosys(self, verilog_code: str) -> Tuple[str, Optional[str]]:
         """
         Step B: Write Verilog to a temp file, run Yosys synthesis,
-        and return the netlist JSON string.
+        and return (netlist_json, svg_path).
         Requires yosys to be installed: brew install yosys / apt install yosys
         """
+        import shutil as _shutil
+
+        verilog_code = self._sanitize_verilog(verilog_code)
         module_name = self._extract_top_module(verilog_code)
         top_flag = f"-top {module_name}" if module_name else ""
         print(f"  Top module: {module_name or '(none found)'}")
@@ -210,14 +267,15 @@ class ElectronicsAgent:
             svg_prefix   = os.path.join(tmpdir, "schematic")
             script_path  = os.path.join(tmpdir, "synth.ys")
 
-            with open(verilog_path, "w") as f:
+            with open(verilog_path, "w", encoding="ascii") as f:
                 f.write(verilog_code)
 
+            show_module = module_name if module_name else ""
             yosys_script = (
-                f"read_verilog -defer {verilog_path}\n"
+                f"read_verilog -sv {verilog_path}\n"
                 f"synth {top_flag}\n"
                 f"write_json {netlist_path}\n"
-                f"show -format svg -prefix {svg_prefix}\n"
+                f"show -format svg -prefix {svg_prefix} {show_module}\n"
             )
             with open(script_path, "w") as f:
                 f.write(yosys_script)
@@ -233,11 +291,10 @@ class ElectronicsAgent:
                     print(f"Yosys synthesis error:\n{result.stderr}")
                     return json.dumps({"error": result.stderr}), None
 
-                import shutil
                 svg_tmp = svg_prefix + ".svg"
                 svg_out = None
                 if os.path.exists(svg_tmp):
-                    shutil.copy(svg_tmp, SVG_OUTPUT)
+                    _shutil.copy(svg_tmp, SVG_OUTPUT)
                     svg_out = SVG_OUTPUT
                     print(f"  SVG schematic saved to: {SVG_OUTPUT}")
                 else:
@@ -254,6 +311,39 @@ class ElectronicsAgent:
                 return json.dumps({"error": msg}), None
             except subprocess.TimeoutExpired:
                 return json.dumps({"error": "Yosys synthesis timed out."}), None
+
+    def _fix_verilog_with_error(self, verilog: str, yosys_error: str) -> str:
+        """
+        Ask Claude to patch the Verilog given a Yosys error message.
+        Returns the corrected Verilog code only (no prose, no fences).
+        """
+        print(f"  Asking Claude to fix synthesis error...")
+        fix_system = (
+            "You are an expert Verilog-2001 engineer. "
+            "You will be given a broken Verilog file and a Yosys error message. "
+            "Output ONLY the corrected Verilog source with no explanation, no markdown fences. "
+            "Fix the specific error described while preserving the rest of the design. "
+            "PORT CONSISTENCY rule: every .port(signal) in a module instantiation must match "
+            "a port name declared in that module's port list."
+        )
+        fix_user = (
+            f"Yosys error:\n{yosys_error}\n\n"
+            f"Verilog source:\n{verilog}\n\n"
+            "Return the corrected Verilog only."
+        )
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            system=fix_system,
+            messages=[{"role": "user", "content": fix_user}],
+        )
+        fixed = response.content[0].text.strip()
+        if fixed.startswith("```"):
+            lines = fixed.split("\n")
+            start = 1
+            end = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
+            fixed = "\n".join(lines[start:end])
+        return fixed.strip()
 
     # -------------------------------------------------------------------------
     # Step C: Build RTL schematic description from netlist JSON
@@ -361,9 +451,31 @@ class ElectronicsAgent:
                 },
             )
 
-        # Step B — synthesize unified Verilog → netlist JSON via Yosys
+        # Step B — synthesize unified Verilog → netlist JSON via Yosys (with retry)
         print("\n--- Step B: Yosys synthesis ---")
-        netlist_json, svg_path = self._synthesize_with_yosys(verilog)
+        MAX_SYNTH_RETRIES = 3
+        netlist_json, svg_path = None, None
+        current_verilog = verilog
+        for attempt in range(1, MAX_SYNTH_RETRIES + 1):
+            print(f"  Synthesis attempt {attempt}/{MAX_SYNTH_RETRIES}")
+            netlist_json, svg_path = self._synthesize_with_yosys(current_verilog)
+            try:
+                parsed = json.loads(netlist_json)
+                if "error" not in parsed:
+                    break  # success
+                yosys_error = parsed["error"]
+                # Don't retry on Yosys-not-found or timeout — those won't be fixed by rewriting
+                if "not found" in yosys_error or "timed out" in yosys_error:
+                    break
+                if attempt < MAX_SYNTH_RETRIES:
+                    print(f"  Synthesis error on attempt {attempt}: {yosys_error[:200]}")
+                    current_verilog = self._fix_verilog_with_error(current_verilog, yosys_error)
+                    if not current_verilog.strip():
+                        print("  Fix returned empty Verilog — stopping retries.")
+                        break
+            except (json.JSONDecodeError, KeyError):
+                break  # netlist_json is real JSON, not an error dict
+        verilog = current_verilog  # use the (possibly fixed) version in output
         print("Yosys synthesis complete")
 
         # Step C — build RTL schematic description from netlist

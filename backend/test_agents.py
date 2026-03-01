@@ -25,7 +25,7 @@ async def test_pipeline():
 
     data_agent = DataExtractionAgent()
     spec_agent = SpecGeneratorAgent()
-    electronics_agent = ElectronicsAgent(use_nemotron=False)  # set True to use Nemotron
+    electronics_agent = ElectronicsAgent(use_nemotron=True)
 
     # -------------------------------------------------------------------------
     # Step 1: Data extraction + Spec generation (parallel)
