@@ -87,9 +87,20 @@ class AssemblyAgent:
             # 1b. Discover and measure components
             all_bounds = load_all_components(COMPONENTS_DIR)
             if component_files:
-                normalised = [a.lower().replace(" ", "_") for a in component_files]
-                all_bounds = [b for b in all_bounds 
-                    if b.filename.lower().replace(".stl", "") in normalised]
+                # Fuzzy match: accept a component if its filename stem appears
+                # anywhere in any requested name, or vice-versa.  This handles
+                # LLM variants like "ESP32 DevKit" matching "esp32.stl" and
+                # "Arduino Uno R3" matching "arduino_uno.stl".
+                normalised_requests = [a.lower().replace(" ", "_") for a in component_files]
+                def _fuzzy_match(filename_stem: str) -> bool:
+                    for req in normalised_requests:
+                        if filename_stem in req or req in filename_stem:
+                            return True
+                    return False
+                all_bounds = [
+                    b for b in all_bounds
+                    if _fuzzy_match(b.filename.lower().replace(".stl", ""))
+                ]
             print("all_bounds:", all_bounds)
 
             # if not all_bounds:
@@ -504,16 +515,18 @@ class AssemblyAgent:
         """
         Ensure that import() calls reference the absolute path to
         cad_library/components so OpenSCAD can find the STLs.
+        Handles both single- and double-quoted paths, relative paths,
+        and cases where Claude already wrote an absolute or partial path.
         """
-        # Replace relative references with absolute
-        code = code.replace(
-            'import("', f'import("{COMPONENTS_DIR}/'
-        )
-        # Avoid double-pathing if Claude already used the full path
-        code = code.replace(
-            f'{COMPONENTS_DIR}/{COMPONENTS_DIR}/',
-            f'{COMPONENTS_DIR}/',
-        )
+        def _rewrite(match: re.Match) -> str:
+            quote = match.group(1)   # ' or "
+            inner = match.group(2)   # original path string
+            # Keep only the basename so we always resolve from COMPONENTS_DIR
+            basename = os.path.basename(inner)
+            return f'import({quote}{COMPONENTS_DIR}/{basename}{quote})'
+
+        # Match import('...') and import("...") — any path content
+        code = re.sub(r'import\(([\'"])(.*?)[\'"]\)', _rewrite, code)
         return code
 
     @staticmethod
@@ -547,15 +560,23 @@ class AssemblyAgent:
     def _export_stl(scad_path: str) -> Optional[str]:
         """Export the .scad file to STL. Returns path or None."""
         if not shutil.which("openscad"):
+            print("  [openscad] not found on PATH — skipping STL export")
             return None
         stl_path = scad_path.replace(".scad", ".stl")
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["openscad", "-o", stl_path, scad_path],
-                check=True, capture_output=True, timeout=120,
+                capture_output=True, text=True, timeout=120,
             )
+            if result.returncode != 0:
+                print(f"  [openscad] export failed (rc={result.returncode}):\n{result.stderr}")
+                return None
             return stl_path if os.path.exists(stl_path) else None
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        except subprocess.TimeoutExpired:
+            print("  [openscad] export timed out")
+            return None
+        except Exception as e:
+            print(f"  [openscad] unexpected error: {e}")
             return None
 
     @classmethod

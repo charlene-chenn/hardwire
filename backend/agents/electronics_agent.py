@@ -613,11 +613,12 @@ class ElectronicsAgent:
         # 3. LLM Evaluation
         system_prompt = (
             "You are a helpful electronics coach reviewing a beginner's Verilog design. "
-            "Evaluate the code against the design prompt and return a score from 0 to 100. "
             "Keep your feedback short and encouraging — the audience is amateur builders. "
-            "Provide exactly 5 concise, actionable next steps (no strengths/weaknesses lists). "
+            "Provide a summary of what the code does, any key implementation details, "
+            "and exactly 5 concise, actionable next steps formatted as bullet points starting with '• '. "
             "Output ONLY valid JSON with these keys: 'score' (int), 'explanation' (1-2 sentences max), "
-            "'next_steps' (array of exactly 5 short action strings), 'is_syntactically_correct' (bool)."
+            "'summary' (string describing what the code does and key implementation details), "
+            "'next_steps' (array of exactly 5 strings, each starting with '• '), 'is_syntactically_correct' (bool)."
         )
         
         user_prompt = (
@@ -647,6 +648,7 @@ class ElectronicsAgent:
             # Ensure keys exist
             evaluation.setdefault("score", 0)
             evaluation.setdefault("explanation", "Could not parse evaluation.")
+            evaluation.setdefault("summary", "")
             evaluation.setdefault("next_steps", [])
             evaluation.setdefault("is_syntactically_correct", syntax_ok)
             
