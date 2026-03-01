@@ -8,5 +8,9 @@ beautifulsoup4
 pydantic
 tavily-python
 fpdf2
+transformers
+torch
+accelerate
+pdfplumber
 numpy-stl
 python-multipart

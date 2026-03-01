@@ -10,59 +10,60 @@ load_dotenv()
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.agents.spec_generator import SpecGeneratorAgent
 from backend.agents.data_extraction import DataExtractionAgent
 from backend.agents.electronics_agent import ElectronicsAgent
+from backend.agents.spec_generator import SpecGeneratorAgent
 
 async def test_pipeline():
-    # Sample user prompt for a hackathon project
     sample_prompt = "I want to build an automated plant watering system using an ESP32, a capacitive soil moisture sensor, and a 5V relay to control a water pump."
-    
-    print(f"--- TESTING PIPELINE WITH PROMPT ---{sample_prompt}")
 
-    # Initialize agents
-    spec_agent = SpecGeneratorAgent()
+    print(f"--- TESTING DATA EXTRACTION ---\n{sample_prompt}\n")
+
     data_agent = DataExtractionAgent()
+    spec_agent = SpecGeneratorAgent()
     electronics_agent = ElectronicsAgent()
 
-    # 1. Test Spec Generator Agent
-    print("--- Testing Spec Generator Agent ---")
+    # 1. Data extraction
+    try:
+        data_output = await data_agent.extract_and_fetch(sample_prompt)
+        print("\nData Extraction Output:")
+        print(f"  Datasheets fetched : {len(data_output.datasheet_pdfs)}")
+        print(f"  STLs fetched       : {len(data_output.component_stls)}")
+        print(f"  Components found   : {data_output.metadata.get('extracted_components')}")
+        print(f"  Recommendations    : {[r.name for r in data_output.recommendations]}")
+        for url in data_output.datasheet_pdfs:
+            print(f"  PDF URL: {url}")
+        for url in data_output.component_stls:
+            print(f"  STL URL: {url}")
+    except Exception as e:
+        import traceback
+        print(f"Data Extraction Error: {e}")
+        traceback.print_exc()
+        return
+
+    print("\n" + "="*50 + "\n")
+
+    # 2. Spec generation (needed as input to electronics agent)
     try:
         spec_output = await spec_agent.generate_spec(sample_prompt)
-        print("Spec Generator Output:")
-        print(json.dumps(spec_output.dict(), indent=2))
+        print("Spec generated.")
     except Exception as e:
+        import traceback
         print(f"Spec Generator Error: {e}")
+        traceback.print_exc()
+        return
 
     print("\n" + "="*50 + "\n")
 
-    # 2. Test Data Extraction Agent
-    print("--- Testing Data Extraction Agent ---")
+    # 3. Electronics agent — datasheet fetch only
+    print("--- TESTING ELECTRONICS AGENT (datasheet fetch) ---")
     try:
-        # This will perform web searches and attempt downloads/uploads
-        data_output = await data_agent.extract_and_fetch(sample_prompt)
-        print("Data Extraction Output:")
-        # print(json.dumps(data_output.dict(), indent=2))
-        print(f"Extracted {len(data_output.datasheet_pdfs)} datasheets.")
+        electronics_output = await electronics_agent.generate_design(spec_output, data_output)
+        print(f"  Fetched components: {electronics_output.metadata.get('fetched_components')}")
     except Exception as e:
-        print(f"Data Extraction Error: {e}")
-        data_output = None
-
-    print("\n" + "="*50 + "\n")
-
-    # 3. Test Electronics Agent
-    print("--- Testing Electronics Agent ---")
-    if spec_output and data_output:
-        try:
-            electronics_output = await electronics_agent.generate_design(spec_output, data_output)
-            print("Electronics Agent Output:")
-            print(json.dumps(electronics_output.dict(), indent=2))
-        except Exception as e:
-            print(f"Electronics Agent Error: {e}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print("Skipping Hardware Design test due to previous failures.")
+        import traceback
+        print(f"Electronics Agent Error: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     if not os.getenv("ANTHROPIC_API_KEY"):
