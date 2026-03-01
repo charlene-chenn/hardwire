@@ -28,7 +28,7 @@ export default function Chat() {
       const response = await fetch('http://localhost:8000/process-pipeline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: updatedMessages }),
+        body: JSON.stringify({ prompt: input.trim() }),
       });
 
       const data = await response.json();
