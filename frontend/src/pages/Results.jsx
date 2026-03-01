@@ -89,6 +89,12 @@ export default function Results() {
           </div>
         )}
 
+        {!loading && stlUrl === DEFAULT_STL_URL && (
+          <div className="default-model-badge">
+            Display Model
+          </div>
+        )}
+
         {!loading && stlUrl ? (
           <Canvas camera={{ position: [0, 0, 50] }}>
             <ambientLight intensity={0.6} />

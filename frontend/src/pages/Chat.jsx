@@ -15,6 +15,11 @@ export default function Chat() {
     'Optimizing parameters...',
     'Almost there...',
   ];
+  const examplePrompts = [
+    "Design a robotic arm joint with high torque.",
+    "Generate an ESP32 enclosure with cooling vents.",
+    "Create a custom gearbox for a small drone."
+  ];
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -71,37 +76,61 @@ export default function Chat() {
     }
   };
 
-  return (
-    <div className="chat-container">
-      <h1 className="landing-title" style={{ fontSize: '32px' }}>Bob the Builder</h1>
+  const handleExampleClick = (prompt) => {
+    if (loading) return;
+    setInput(prompt);
+  };
 
-      <div className="chat-messages">
-        {messages.map((msg, i) => (
-          <div key={i} className={`chat-message ${msg.role}`}>
-            <span className="bubble">{msg.content}</span>
+  return (
+    <div className="chat-page-layout">
+      <div className="chat-main-column">
+        <div className="chat-container">
+          <h1 className="landing-title" style={{ fontSize: '32px' }}>Bob the Builder</h1>
+
+          <div className="chat-messages">
+            {messages.map((msg, i) => (
+              <div key={i} className={`chat-message ${msg.role}`}>
+                <span className="bubble">{msg.content}</span>
+              </div>
+            ))}
+            {loading && (
+              <div className="chat-message assistant">
+                <span className="bubble" style={{ color: '#888' }}>{loadingMessage}</span>
+              </div>
+            )}
+            <div ref={bottomRef} />
           </div>
-        ))}
-        {loading && (
-          <div className="chat-message assistant">
-            <span className="bubble" style={{ color: '#888' }}>{loadingMessage}</span>
+
+          <div className="chat-input-row">
+            <textarea
+              className="chat-input"
+              rows={1}
+              placeholder="Type a message to Bob..."
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={loading}
+            />
+            <button className="btn-primary" onClick={sendMessage} disabled={loading} style={{ padding: '8px 20px' }}>
+              Send
+            </button>
           </div>
-        )}
-        <div ref={bottomRef} />
+        </div>
       </div>
 
-      <div className="chat-input-row">
-        <textarea
-          className="chat-input"
-          rows={1}
-          placeholder="Type a message to Bob..."
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={loading}
-        />
-        <button className="btn-primary" onClick={sendMessage} disabled={loading} style={{ padding: '8px 20px' }}>
-          Send
-        </button>
+      <div className="chat-examples-sidebar">
+        <h3 className="section-title">Example Prompts</h3>
+        <div className="example-prompts-list">
+          {examplePrompts.map((prompt, idx) => (
+            <div
+              key={idx}
+              className="example-prompt-card glass"
+              onClick={() => handleExampleClick(prompt)}
+            >
+              <p>{prompt}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
