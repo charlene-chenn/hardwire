@@ -171,12 +171,12 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
                 detail="No pipeline data found for this prompt. Run /process-pipeline first."
             )
 
-        comps = extraction.metadata  # List of Supabase public URLs
-        print(f"Passing {len(comps)} STL URL(s) to assembly agent: {comps}")
+        comps = extraction.metadata.get("extracted_components", [])
+        print(f"Passing {len(comps)} component(s) to assembly agent: {comps}")
 
         assembly_output: AssemblyOutput = await assembly_agent.design_assembly(
             user_prompt=prompt,
-            component_files=comps if comps else None # names of the stl we're looking for
+            component_files=comps if comps else None  # names of the stl we're looking for
         )
 
         supabase_payload = {
