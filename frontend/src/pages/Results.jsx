@@ -125,21 +125,7 @@ export default function Results() {
           </div>
           <div className="panel-body">
             {verificationData ? (
-              <div className="verification-result">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                  <span className="panel-label" style={{ fontSize: '1.2rem', color: '#00ff00' }}>
-                    Score: {verificationData.score}/100
-                  </span>
-                  <span style={{
-                    color: verificationData.is_syntactically_correct ? '#00ff00' : '#ff4444',
-                    fontSize: '0.9rem',
-                    padding: '2px 8px',
-                    border: `1px solid ${verificationData.is_syntactically_correct ? '#00ff00' : '#ff4444'}`,
-                    borderRadius: '4px'
-                  }}>
-                    {verificationData.is_syntactically_correct ? 'SYNTAX OK' : 'SYNTAX ERROR'}
-                  </span>
-                </div>
+              <div className="verification-result"> 
                 <p style={{ whiteSpace: 'pre-wrap' }}>{verificationData.explanation}</p>
               </div>
             ) : (
