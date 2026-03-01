@@ -200,48 +200,14 @@ body {
   background-color: #1a68ff;
 }
 
-/* LED Grid Background Style */
-.led-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: -1;
-  overflow: hidden;
+/* Gravity Grid Canvas */
+.gravity-canvas {
+  filter: brightness(1.2) contrast(1.1);
   opacity: 1;
 }
 
-.led-interaction-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-columns: repeat(20, 1fr);
-  grid-template-rows: repeat(20, 1fr);
-  z-index: 1;
-}
-
-.led-point {
-  width: 100%;
-  height: 100%;
-  cursor: default;
-}
-
-.led-point:hover {
-  background: radial-gradient(circle, var(--accent-blue) 0%, transparent 70%);
-  opacity: 0.6;
-  box-shadow: 0 0 20px 5px var(--accent-blue);
-  transition: all 0.15s ease;
-}
-
-.led-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: brightness(0.4) contrast(1.2);
+.led-container {
+  display: none;
 }
 
 /* Chat & Results */
@@ -409,4 +375,46 @@ body {
 
 .copy-btn:active {
   transform: translateY(0);
+}
+
+/* Loading Spinner */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 12, 0.5);
+  z-index: 20;
+  backdrop-filter: blur(4px);
+  border-radius: 12px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }

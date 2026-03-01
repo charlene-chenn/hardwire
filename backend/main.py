@@ -38,7 +38,7 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
         # Note: In a production environment, you might use a task queue or background tasks.
         results = await asyncio.gather(
             data_extraction_agent.extract_and_fetch(prompt),
-            spec_generator_agent.generate_spec(prompt)
+            spec_generator_agent.generate_spec(prompt),
         )
 
         extraction_result = results[0]
@@ -54,11 +54,51 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
             "prompt": prompt,
             "extraction": extraction_result.dict(),
             "spec": spec_result.dict(),
-            "design": electronics_result.dict()
+            "design": electronics_result.dict(),
         }
 
         # Save to Supabase (Mocked if no credentials)
         supabase_service.save_data("pipeline_results", combined_payload)
+
+        return combined_payload
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/stl-model")
+async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
+    """
+    Stl model generation entry point.
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set.")
+
+    try:
+        # Run agents in parallel
+        # Note: In a production environment, you might use a task queue or background tasks.
+        results = await asyncio.gather(
+            asssembly_agent.design_assembly(prompt)
+        )
+
+        # Might need to add getting result 1 depending on how we r getting the stl files
+        supabase_assembly_result = results.stl_housing_path
+        assmebly_result = results.stl_full_path
+
+        combined_payload = {
+            "prompt": prompt,
+            "design_stl_file":assmebly_result
+        }
+
+        supabase_payload = {
+            "prompt": prompt,
+            "design_stl_file":supabase_assembly_result
+        }
+
+        # Save to Supabase (Mocked if no credentials)
+        supabase_service.save_data("pipeline_results_stl_files", supabase_payload)
 
         return combined_payload
 

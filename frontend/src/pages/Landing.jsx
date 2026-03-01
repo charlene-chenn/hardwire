@@ -1,14 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import LEDGrid from '../components/LEDGrid';
+import GravityGrid from '../components/GravityGrid';
 
 export default function Landing() {
   const navigate = useNavigate();
 
   return (
     <>
-      <LEDGrid />
+      <GravityGrid />
       <div className="page-container">
         <div className="landing-content">
           <h1 className="landing-title">Hardwire</h1>
@@ -19,7 +19,7 @@ export default function Landing() {
           </p>
 
           <button className="btn-primary" onClick={() => navigate('/chat')}>
-            Launch Mission Control →
+            Launch Bob the Builder →
           </button>
         </div>
       </div>

@@ -25,18 +25,18 @@ export default function Chat() {
 
     try {
       // 🔌 REPLACE THIS URL with your actual backend endpoint
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch('http://localhost:8000/process-pipeline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: updatedMessages }),
       });
 
       const data = await response.json();
-      const assistantMessage = { role: 'assistant', content: data.reply };
-      setMessages(prev => [...prev, assistantMessage]);
+      //const assistantMessage = { role: 'assistant', content: data.reply };
+      //setMessages(prev => [...prev, assistantMessage]);
 
       // Navigate to results after LLM responds
-      setTimeout(() => navigate('/results', { state: { reply: data.reply } }), 800);
+      setTimeout(() => navigate('/results', { state: { reply: data.reply, prompt: input.trim() } }), 800);
     } catch (err) {
       console.error('Backend error:', err);
       setMessages(prev => [
