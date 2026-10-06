@@ -9,10 +9,6 @@ beautifulsoup4
 pydantic
 tavily-python
 fpdf2
-transformers
-bitsandbytes
-torch
-accelerate
 pdfplumber
 numpy-stl
 python-multipart

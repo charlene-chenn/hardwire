@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, Stage } from '@react-three/drei';
+import { OrbitControls, Stage } from '@react-three/drei';
 import CodeBlock from '../components/CodeBlock';
 import STLModel from '../components/STLModel';
 
@@ -11,7 +11,7 @@ import STLModel from '../components/STLModel';
  *   (Assets in `public/` are served from the root `/` in the browser).
  * - SUPABASE: Use the full public URL from your Supabase bucket.
  */
-const DEFAULT_STL_URL = '/models/assembly.stl'; // This will resolve to public/models/test.stl
+const DEFAULT_STL_URL = '/models/arduino.stl'; // This will resolve to public/models/test.stl
 
 // Example generated code — replace with data from your backend
 const EXAMPLE_CODE = `# Hardwire configuration
@@ -46,12 +46,14 @@ export default function Results() {
     setExpandedBlock(null);
   };
 
+  const passedStlUrl = location.state?.stlUrl;
+
   React.useEffect(() => {
-    if (prompt && !location.state?.stlUrl) {
+    if (prompt && !passedStlUrl) {
       const fetchSTL = async () => {
         setLoading(true);
         try {
-          const response = await fetch('http://localhost:8000/stl-model', {
+          const response = await fetch('/api/stl-model', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt }),
@@ -86,7 +88,7 @@ export default function Results() {
     return () => {
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     };
-  }, [prompt]);
+  }, [prompt, passedStlUrl]);
 
   return (
     <div className="results-layout glass">

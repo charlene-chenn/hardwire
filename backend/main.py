@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Body, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -18,6 +18,8 @@ from services.supabase_service import SupabaseService
 load_dotenv()
 
 app = FastAPI(title="HARDWIRE Multi-Agent Pipeline")
+# All routes are served under /api, matching the public rewrite in vercel.json
+router = APIRouter(prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,11 +37,11 @@ assembly_agent = AssemblyAgent()
 supabase_service = SupabaseService()
 results: Dict[str, Any] = {}  # In-memory store keyed by prompt
 
-@app.get("/")
+@router.get("/")
 async def root():
     return {"message": "HARDWIRE API is running."}
 
-@app.post("/process-pipeline")
+@router.post("/process-pipeline")
 async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
     """
     Main pipeline entry point.
@@ -100,7 +102,7 @@ async def process_pipeline(prompt: str = Body(..., embed=True)) -> Dict[str, Any
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/design-assembly")
+@router.post("/design-assembly")
 async def design_assembly(
     prompt: str = Form(...),
     wall_thickness: float = Form(2.0),
@@ -165,7 +167,7 @@ async def design_assembly(
 
 
 
-@app.post("/stl-model")
+@router.post("/stl-model")
 async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
     """
     STL model generation entry point.
@@ -202,5 +204,7 @@ async def stl_model(prompt: str = Body(..., embed=True)) -> Dict[str, Any]:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
+app.include_router(router)
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

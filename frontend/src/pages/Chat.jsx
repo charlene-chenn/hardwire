@@ -18,7 +18,7 @@ export default function Chat() {
   const examplePrompts = [
     "Design a robotic arm joint with high torque.",
     "Generate an ESP32 enclosure with cooling vents.",
-    "Create a plant pot with an Arduino Uno and DHT22."
+    "Interface DHT22 with a Arduino Uno to monitor humidity."
   ];
   const bottomRef = useRef(null);
 
@@ -44,7 +44,7 @@ export default function Chat() {
     }, 2000);
 
     try {
-      const response = await fetch('http://localhost:8000/process-pipeline', {
+      const response = await fetch('/api/process-pipeline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: input.trim() }),
